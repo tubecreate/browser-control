@@ -1,0 +1,22 @@
+# Handle everything as ignored by default
+*
+
+# Allow directories
+!*/
+
+# Allow specific file types
+!*.js
+!*.json
+!*.md
+!*.gitignore
+!LICENSE
+
+# Explicitly ignore heavy folders (just in case)
+node_modules/
+profiles/
+dist/
+browser/
+data/
+.git/
+.DS_Store
+*.log

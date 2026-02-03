@@ -1,0 +1,21 @@
+{
+  "name": "browser-laucher",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.13.4",
+    "browser-with-fingerprints": "^2.3.4",
+    "fs-extra": "^11.3.3",
+    "minimist": "^1.2.8",
+    "playwright": "^1.58.1",
+    "playwright-with-fingerprints": "^2.3.4"
+  },
+  "description": ""
+}
