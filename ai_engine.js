@@ -12,7 +12,8 @@ export class AIEngine {
       { name: 'browse', description: 'Scroll and move mouse naturally', params: ['iterations'] },
       { name: 'click', description: 'Click on a result or selector', params: ['selector (optional)'] },
       { name: 'login', description: 'Login to Google/account', params: ['email', 'password'] },
-      { name: 'comment', description: 'Post a context-aware comment', params: [] }
+      { name: 'comment', description: 'Post a context-aware comment', params: [] },
+      { name: 'visual_scan', description: 'Analyze screen with AI and suggest actions', params: [] }
     ];
   }
 
@@ -81,10 +82,11 @@ Example output: {
 
       const actionMarkers = [
         { key: 'search', patterns: [/tìm\s+kiếm/i, /search/i, /tìm/i] },
-        { key: 'browse', patterns: [/lướt\s+web/i, /lướt/i, /browse/i, /scroll/i, /xem/i] },
+        { key: 'browse', patterns: [/lướt\s+web/i, /lướt/i, /browse/i, /scroll/i, /xem/i, /wait/i, /đợi/i, /chờ/i] },
         { key: 'click', patterns: [/bấm\s+vào/i, /click\s+vào/i, /vào\s+kết\s+quả/i, /vào\s+bài/i, /vào/i, /click/i, /bấm/i] },
         { key: 'login', patterns: [/login/i, /đăng\s+nhập/i] },
-        { key: 'comment', patterns: [/comment/i, /bình\s+luận/i, /nhận\s+xét/i] }
+        { key: 'comment', patterns: [/comment/i, /bình\s+luận/i, /nhận\s+xét/i] },
+        { key: 'visual_scan', patterns: [/visual\s+scan/i, /scan\s+màn\s+hình/i, /phân\s+tích\s+hình/i, /analyze\s+screen/i] }
       ];
 
       // Find all markers in the text
@@ -178,6 +180,8 @@ Example output: {
           }
         } else if (current.key === 'comment') {
           actions.push({ action: 'comment', params: {} });
+        } else if (current.key === 'visual_scan') {
+          actions.push({ action: 'visual_scan', params: {} });
         }
       }
 

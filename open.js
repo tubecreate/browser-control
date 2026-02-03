@@ -8,6 +8,7 @@ import * as browseAction from './actions/browse.js';
 import * as clickAction from './actions/click.js';
 import * as loginAction from './actions/login.js';
 import * as commentAction from './actions/comment.js';
+import * as visualScanAction from './actions/visual_scan.js';
 
 // Action Registry
 const ACTION_REGISTRY = {
@@ -15,7 +16,8 @@ const ACTION_REGISTRY = {
   browse: browseAction.browse,
   click: clickAction.click,
   login: loginAction.login,
-  comment: commentAction.comment
+  comment: commentAction.comment,
+  visual_scan: visualScanAction.visual_scan
 };
 
 /**
@@ -119,12 +121,32 @@ async function main() {
       });
 
       // 3. Execute Action Sequence
+      // 3. Execute Action Sequence
       for (const step of actionSequence) {
         const actionFn = ACTION_REGISTRY[step.action];
         if (actionFn) {
           console.log(`\n--- Executing: ${step.action} ---`);
-          // Pass isRetry down to actions
-          await actionFn(page, { ...step.params, isRetry });
+          try {
+            // Pass isRetry down to actions
+            await actionFn(page, { ...step.params, isRetry });
+          } catch (actionError) {
+            console.error(`Error in action '${step.action}': ${actionError.message}`);
+            
+            // --- SELF-HEALING LOGIC ---
+            console.log('Attempting Visual Error Diagnosis...');
+            const { diagnoseAndSuggest } = await import('./vision_engine.js');
+            const suggestion = await diagnoseAndSuggest(page, `Execute action: ${step.action} with params ${JSON.stringify(step.params)}`, actionError.message);
+            
+            if (suggestion && ACTION_REGISTRY[suggestion.action]) {
+              console.log(`\n>>> SELF-HEALING: Executing alternative action: ${suggestion.action} <<<`);
+              const remedialFn = ACTION_REGISTRY[suggestion.action];
+              await remedialFn(page, { ...suggestion.params, isRetry });
+              console.log('>>> Remedial action completed. Resuming sequence. <<<\n');
+            } else {
+              console.warn('No effective remedial action found. Propagating error.');
+              throw actionError;
+            }
+          }
         } else {
           console.warn(`Unknown action: ${step.action}`);
         }

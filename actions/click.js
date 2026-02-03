@@ -5,6 +5,7 @@ import { humanMove } from './mouse_helper.js';
  * @param {import('playwright').Page} page
  * @param {object} params
  * @param {string} [params.selector] - CSS selector to click. If not provided, clicks first search result.
+ * @param {string} [params.type] - Type of target (e.g. 'video').
  */
 export async function click(page, params = {}) {
   const { selector } = params;
@@ -19,7 +20,6 @@ export async function click(page, params = {}) {
     target = page.locator(selector).first();
   } else if (params.type === 'video') {
     // Target video results: YouTube links or video thumbnails
-    // More robust selectors for video results
     target = page.locator('a[href*="youtube.com/watch"], a[href*="/url?q=https://www.youtube.com"], .X9p9S a, g-video-player a, video-voyager a').first();
     console.log('Searching for video results...');
   } else {
@@ -80,6 +80,8 @@ export async function click(page, params = {}) {
       }
     }
   } else {
-    console.warn('Target element not visible, skipping click.');
+    const msg = `Target element '${selector || 'default'}' not visible.`;
+    console.warn(msg);
+    throw new Error(msg);
   }
 }

@@ -24,7 +24,13 @@ export async function search(page, params) {
   
   // Navigate to Google if not already there
   if (!page.url().includes('google.com')) {
-    await page.goto('https://www.google.com', { waitUntil: 'networkidle' });
+    // networkidle is flaky on Google; use domcontentloaded + selector wait
+    await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    try {
+      await page.waitForSelector('textarea[name="q"], input[name="q"]', { timeout: 10000 });
+    } catch (e) {
+      console.warn('Search input not found after navigation, continuing anyway...');
+    }
   }
   
   await handleCaptcha(page, params.isRetry);
