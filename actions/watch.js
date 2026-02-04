@@ -15,17 +15,17 @@ export async function watch(page, params = {}) {
   let durationSeconds = 60;
   
   if (typeof durationParam === 'string') {
-    if (durationParam.includes('%')) {
+        if (durationParam.includes('%')) {
         // Percentage based duration (requires video metadata)
         console.log(`Percentage duration detected: ${durationParam}. Waiting for video metadata...`);
         try {
-            await page.waitForSelector('video', { timeout: 15000 });
+            await page.waitForSelector('video', { timeout: 10000 }); // Wait 10s for slow networks
             const videoDuration = await page.evaluate(async () => {
                 const v = document.querySelector('video');
                 if (!v) return 600; // Default if not found
                 if (isNaN(v.duration) || v.duration === Infinity) {
                     // Try to wait a bit for metadata
-                    await new Promise(r => setTimeout(r, 2000)); 
+                    await new Promise(r => setTimeout(r, 1000)); 
                 }
                 return v.duration || 600;
             });
@@ -34,7 +34,7 @@ export async function watch(page, params = {}) {
             durationSeconds = Math.floor(videoDuration * pct);
             console.log(`Video duration: ${videoDuration}s. Calculated watch time (${durationParam}): ${durationSeconds}s`);
         } catch (e) {
-            console.warn('Failed to get video duration for percentage calculation:', e.message);
+            console.warn('Failed to get video duration for percentage calculation (timeout/error). Defaulting to 60s.');
             durationSeconds = 60;
         }
     } else {
@@ -55,7 +55,7 @@ export async function watch(page, params = {}) {
 
   // 2. Ensure Video is Playing
   try {
-    await page.waitForSelector('video', { timeout: 10000 });
+    await page.waitForSelector('video', { timeout: 10000 }); // Wait 10s for playback
     const isPlaying = await page.evaluate(() => {
       const v = document.querySelector('video');
       return v && !v.paused;
