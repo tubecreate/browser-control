@@ -68,7 +68,7 @@ async function main() {
 
   // --- Multi-Attempt Logic ---
   let attempt = 1;
-  const maxAttempts = 3;
+  const maxAttempts = 2;
   let success = false;
 
   while (attempt <= maxAttempts && !success) {
@@ -238,9 +238,6 @@ async function main() {
         attempt++;
       } else if (error.message === 'FINGERPRINT_RETRY' && attempt < maxAttempts) {
         console.error('\n>>> Retrying with fresh fingerprint...');
-        attempt++;
-      } else if ((error.message.includes('Page crashed') || error.message.includes('Target page, context or browser has been closed') || error.message.includes('Target closed') || error.message.includes('ERR_CONNECTION_TIMED_OUT')) && attempt < maxAttempts) {
-        console.error(`\n>>> Browser Crash/Network Error detected: ${error.message}. Retrying...`);
         attempt++;
       } else if (error.message === 'CAPTCHA_TIMEOUT') {
         console.error('\n>>> Manual CAPTCHA resolution timed out. Closing...');

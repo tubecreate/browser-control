@@ -12,7 +12,8 @@ export class AIEngine {
       { name: 'browse', description: 'Scroll and move mouse naturally', params: ['iterations'] },
       { name: 'click', description: 'Click on a result or selector', params: ['selector (optional)'] },
       { name: 'login', description: 'Login to Google/account', params: ['email', 'password'] },
-      { name: 'comment', description: 'Post a context-aware comment', params: [] },
+      { name: 'comment', description: 'Post a context-aware comment', params: ['instruction (optional)'] },
+      { name: 'watch', description: 'Watch video for specific time', params: ['duration (e.g. 50-100s)'] },
       { name: 'visual_scan', description: 'Analyze screen with AI and suggest actions', params: [] }
     ];
   }
@@ -36,20 +37,23 @@ Instructions:
 - Convert time (e.g., "50-100s") to "browse" iterations (10s per iteration).
 - "vào kết quả tốt nhất" or "bấm vào bài" maps to "click".
 - If the user specifies a profile (e.g., "mở profile 'profile1'"), extract the profile name.
+- "xem video 50-100s" maps to action "watch" with duration "50-100s".
 
 Return ONLY a JSON object. 
-Example input: "mở profile 'profile1' và vào google tìm kiếm 'tubecreate'"
+Example input: "mở profile 'profile1' vào google tìm kiếm 'tubecreate' và xem video 30s"
 Example output: {
   "profile": "profile1",
   "actions": [
-    {"action": "search", "params": {"keyword": "tubecreate"}}
+    {"action": "search", "params": {"keyword": "tubecreate"}},
+    {"action": "click", "params": {"type": "video"}},
+    {"action": "watch", "params": {"duration": "30s"}}
   ]
 }`;
 
     try {
       console.log('Sending request to Local AI...');
       const response = await axios.post(LOCAL_AI_URL, {
-        model: 'deepseek-chat',
+        model: 'deepseek-r1:latest',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt }
@@ -57,14 +61,29 @@ Example output: {
         stream: false
       }, { timeout: 30000 });
 
-      const content = response.data.choices[0].message.content;
+      let content = response.data.choices[0].message.content;
       console.log('AI Response:', content);
       
+      // Clean up <think> tags if present (common in reasoning models)
+      content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+      // Attempt 1: Extract from ```json code block
+      const codeBlockMatch = content.match(/```json([\s\S]*?)```/);
+      if (codeBlockMatch) {
+         try {
+            return JSON.parse(codeBlockMatch[1]);
+         } catch (e) { console.warn('Failed to parse JSON code block:', e.message); }
+      }
+
+      // Attempt 2: Extract largest JSON object
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        try {
+            return JSON.parse(jsonMatch[0]);
+        } catch (e) { console.warn('Failed to parse regex-matched JSON:', e.message); }
       }
       
+      // Attempt 3: Direct parse
       const parsed = JSON.parse(content);
       return Array.isArray(parsed) ? { actions: parsed } : parsed;
     } catch (error) {
@@ -82,7 +101,8 @@ Example output: {
 
       const actionMarkers = [
         { key: 'search', patterns: [/tìm\s+kiếm/i, /search/i, /tìm/i] },
-        { key: 'browse', patterns: [/lướt\s+web/i, /lướt/i, /browse/i, /scroll/i, /xem/i, /wait/i, /đợi/i, /chờ/i] },
+        { key: 'browse', patterns: [/lướt\s+web/i, /lướt/i, /browse/i, /scroll/i, /wait/i, /đợi/i, /chờ/i] },
+        { key: 'watch', patterns: [/xem\s+video/i, /watch/i, /xem/i] },
         { key: 'click', patterns: [/bấm\s+vào/i, /click\s+vào/i, /vào\s+kết\s+quả/i, /vào\s+bài/i, /vào/i, /click/i, /bấm/i] },
         { key: 'login', patterns: [/login/i, /đăng\s+nhập/i] },
         { key: 'comment', patterns: [/comment/i, /bình\s+luận/i, /nhận\s+xét/i] },
@@ -108,24 +128,31 @@ Example output: {
 
       // Sort markers by position
       foundMarkers.sort((a, b) => a.index - b.index);
+      
+      console.log('Detected Markers (Pre-filter):', JSON.stringify(foundMarkers));
 
-      // Deduplicate overlapping or adjacent markers (prefer longer or earlier matches)
+      // Deduplicate overlapping markers
       foundMarkers = foundMarkers.filter((m, i) => {
         return !foundMarkers.some((other, oi) => {
           if (oi === i) return false;
           // Exact overlap or containment
           const covers = other.index <= m.index && (other.index + other.length) >= (m.index + m.length);
           if (other.index === m.index) return other.length > m.length;
-          // Proximity deduplication: if two markers are within 10 chars of each other
-          const distance = Math.abs(m.index - other.index);
-          const isProximityMatch = distance < 11 && oi < i; 
           
-          // Repeated intent deduplication: skip if same key already found very close by (e.g., within 50 chars)
-          const isRepeatedIntent = m.key === other.key && distance < 51 && oi < i;
+          // REMOVED Proximity deduplication to allow close consecutive actions (e.g. click -> watch)
+          // const distance = Math.abs(m.index - other.index);
+          // const isProximityMatch = distance < 11 && oi < i; 
 
-          return covers || isProximityMatch || isRepeatedIntent;
+          // Repeated intent deduplication: skip if same key already found very close by (e.g., within 15 chars)
+          // This prevents "if not login then login" from creating two login actions
+          const distance = Math.abs(m.index - other.index);
+          const isRepeatedIntent = m.key === other.key && distance < 15 && oi < i;
+
+          return covers || isRepeatedIntent;
         });
       });
+      
+      console.log('Detected Markers (Post-filter):', JSON.stringify(foundMarkers));
 
       // Process markers in order
       for (let i = 0; i < foundMarkers.length; i++) {
@@ -150,6 +177,13 @@ Example output: {
             iterations = Math.floor(parseInt(timeMatch[1]) / 10);
           }
           actions.push({ action: 'browse', params: { iterations: Math.max(1, Math.min(iterations, 20)) } });
+        } else if (current.key === 'watch') {
+          const timeMatch = segmentContext.match(/(\d+)-(\d+)s?/) || segmentContext.match(/(\d+)s?/);
+          let duration = '60s';
+          if (timeMatch) {
+             duration = timeMatch[0]; // Capture the full string "50-100s" or "60s"
+          }
+          actions.push({ action: 'watch', params: { duration } });
         } else if (current.key === 'click') {
           const isVaoGoogle = current.text.toLowerCase() === 'vào' && segmentContext.toLowerCase().startsWith('google');
           if (!isVaoGoogle) {
@@ -161,25 +195,57 @@ Example output: {
             actions.push({ action: 'click', params });
           }
         } else if (current.key === 'login') {
-          // Extract email, password, and recovery email from context
-          // Handle 'email:password:recovery' or 'email:password' or separate words
-          const tripleMatch = segmentContext.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})[:\s]([^\s'":]+)[:]([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-          const doubleMatch = tripleMatch ? null : segmentContext.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})[:\s]([^\s'"]+)/);
+          // Extract email/username and password
+          // Priority 1: "username:password:recovery" or "username:password" (no spaces around colon)
+          // Allow username to be email OR just a string (e.g. voanhtk5)
+          const tripleMatch = segmentContext.match(/([^\s:'"]+)[:]([^\s:'"]+)[:]([^\s:'"]+)/);
+          const doubleMatch = tripleMatch ? null : segmentContext.match(/([^\s:'"]+)[:]([^\s'"]+)/);
           
           if (tripleMatch) {
             actions.push({ action: 'login', params: { email: tripleMatch[1], password: tripleMatch[2], recoveryEmail: tripleMatch[3] } });
           } else if (doubleMatch) {
             actions.push({ action: 'login', params: { email: doubleMatch[1], password: doubleMatch[2] } });
           } else {
+             // Fallback for space-separated
             const parts = segmentContext.split(/[\s:'"]+/).filter(p => p.length > 0 && !p.toLowerCase().includes('login'));
-            const emails = parts.filter(p => p.includes('@'));
-            const email = emails[0] || '';
-            const recoveryEmail = emails[1] || '';
-            const password = parts.find(p => !p.includes('@') && p.length > 3);
-            actions.push({ action: 'login', params: { email, password: password || '', recoveryEmail } });
+            // ... (keep existing extensive logic if needed, or simplify)
+            // For now, simpler fallback for emails
+            const email = parts.find(p => p.includes('@')) || parts[0] || '';
+            const password = parts.find(p => p !== email && p.length > 3) || '';
+            actions.push({ action: 'login', params: { email, password, recoveryEmail: '' } });
           }
-        } else if (current.key === 'comment') {
-          actions.push({ action: 'comment', params: {} });
+          // Extract content: "comment [instruction] [until next keyword]"
+          const instructionParams = {};
+          
+          // Look at the text immediately following the command in the segment
+          let rawInstruction = segmentContext
+            .replace(/comment|bình luận|nhận xét|viết/gi, '')
+            .trim();
+            
+          // Stop at common delimiters OR other action keywords if they accidentally leaked into this segment
+          const delimiters = [',', 'rồi', 'xong', 'sau đó', 'login', 'đăng nhập', 'click', 'bấm', 'vào', 'watch', 'xem'];
+          // Find first occurrence of any delimiter
+          let cutIndex = rawInstruction.length;
+          
+          for (const d of delimiters) {
+             const idx = rawInstruction.toLowerCase().indexOf(d);
+             if (idx !== -1 && idx < cutIndex) {
+                 cutIndex = idx;
+             }
+          }
+          
+          rawInstruction = rawInstruction.substring(0, cutIndex).trim();
+
+          // Also allow explicit quoting: comment "blah blah"
+          const quoteMatch = segmentContext.match(/['"]([^'"]+)['"]/);
+          
+          if (quoteMatch) {
+             instructionParams.instruction = quoteMatch[1];
+          } else if (rawInstruction.length > 3) {
+             instructionParams.instruction = rawInstruction;
+          }
+
+          actions.push({ action: 'comment', params: instructionParams });
         } else if (current.key === 'visual_scan') {
           actions.push({ action: 'visual_scan', params: {} });
         }

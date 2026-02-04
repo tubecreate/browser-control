@@ -41,6 +41,12 @@ export async function login(page, params = {}) {
   console.log(`Checking login status for: ${email}...`);
 
   try {
+    // 0. Ensure we are on a valid domain to check cookies/session
+    if (page.url() === 'about:blank' || page.url().startsWith('data:')) {
+        console.log('Navigating to Google to check session...');
+        await page.goto('https://www.google.com');
+    }
+
     // 1. Initial check: Are we already logged in on the CURRENT site?
     console.log('Verifying session state...');
     await page.waitForTimeout(2000); // Wait for dynamic elements

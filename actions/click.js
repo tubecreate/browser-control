@@ -19,12 +19,19 @@ export async function click(page, params = {}) {
   if (selector) {
     target = page.locator(selector).first();
   } else if (params.type === 'video') {
-    // Target video results: YouTube links or video thumbnails
-    target = page.locator('a[href*="youtube.com/watch"], a[href*="/url?q=https://www.youtube.com"], .X9p9S a, g-video-player a, video-voyager a').first();
-    console.log('Searching for video results...');
+    // Target video results: STRICT YouTube links or video thumbnails
+    // Avoid Clicking "AI Overview" or "People also ask"
+    const videoSelectors = [
+        'a[href*="youtube.com/watch"]', // Direct video links
+        'div[data-surl*="youtube.com/watch"] a', // Video type results
+        'video-voyager a'
+    ];
+    target = page.locator(videoSelectors.join(',')).first();
+    console.log('Searching for STRICT video results (youtube.com)...');
   } else {
     // Default to first Google result if no selector
-    target = page.locator('#search h3').first();
+    // Exclude "People also ask" (often inside .related-question-pair) and AI overviews if possible
+    target = page.locator('#search .g a[href]:not([href*="google.com"])').first();
   }
 
   if (await target.isVisible()) {

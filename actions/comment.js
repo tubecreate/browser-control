@@ -35,17 +35,34 @@ export async function comment(page, params = {}) {
     // 3. Scrape Metadata (Title) for context
     console.log('Scraping video metadata...');
     const metadata = await page.evaluate(() => {
+      // 1. Try YouTube Title Element
       const titleEl = document.querySelector('#title h1 yt-formatted-string') 
                    || document.querySelector('#title h1');
+      if (titleEl && titleEl.innerText.trim()) return { title: titleEl.innerText.trim() };
+
+      // 2. Try Meta Tags
+      const metaTitle = document.querySelector('meta[name="title"]');
+      if (metaTitle && metaTitle.content) return { title: metaTitle.content };
+
+      const ogTitle = document.querySelector('meta[property="og:title"]');
+      if (ogTitle && ogTitle.content) return { title: ogTitle.content };
+
+      // 3. Fallback to Document Title
+      let docTitle = document.title;
+      docTitle = docTitle.replace(/^\(\d+\)\s*/, ''); // Remove notification count (1)
+      docTitle = docTitle.replace(/\s*-\s*YouTube$/, ''); // Remove suffix
+      
       return { 
-        title: titleEl ? titleEl.innerText.trim() : 'Video thú vị'
+        title: docTitle || 'Video thú vị'
       };
     });
     console.log(`Video Title: "${metadata.title}"`);
 
     // 4. Generate Comment via Visual AI
     console.log('Generating comment using Visual AI...');
-    let commentText = await generateContextAwareComment(page, metadata.title);
+    console.log('Ignoring params.instruction as requested. Relying on Title + Vision only.');
+    // Pass "" as instruction to force AI to rely only on Title/Vision
+    let commentText = await generateContextAwareComment(page, metadata.title, "");
     
     if (!commentText) {
        commentText = "Video rất hay, cảm ơn bạn đã chia sẻ!";

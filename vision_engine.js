@@ -113,7 +113,10 @@ If no solution is visible, return null. DO NOT ADD ANY TEXT OUTSIDE THE JSON.`;
         // Find first '{' and last '}' to extract JSON
         const match = content.match(/\{[\s\S]*\}/);
         if (match) {
-          const result = JSON.parse(match[0]);
+          let jsonStr = match[0];
+          // Remove comments ( // ... or /* ... */ ) which might break JSON.parse
+          jsonStr = jsonStr.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+          const result = JSON.parse(jsonStr);
           return result.suggestedAction || null;
         } else {
           console.warn('No JSON object found in response.');
@@ -147,7 +150,7 @@ If no solution is visible, return null. DO NOT ADD ANY TEXT OUTSIDE THE JSON.`;
  * @param {string} title - Video title.
  * @returns {Promise<string>} - Generated comment.
  */
-export async function generateContextAwareComment(page, title) {
+export async function generateContextAwareComment(page, title, userInstruction = "") {
   try {
     const timestamp = Date.now();
     const screenshotPath = path.join(SCREENSHOT_DIR, `comment_context_${timestamp}.jpg`);
@@ -188,6 +191,11 @@ export async function generateContextAwareComment(page, title) {
     console.log('Step 2: Asking DeepSeek to write Vietnamese comment...');
     const contextPart = visualDescription ? `Visual Context: "${visualDescription}"` : "Visual Context: (Not available, rely on title)";
     
+    // Custom Instruction handling
+    const customInstruction = userInstruction 
+        ? `STRICT REQUIREMENT: ${userInstruction}` 
+        : "Tone: Casual, friendly, young internet user (gen Z).";
+
     const textPrompt = `You are a genuine YouTube viewer.
 Video Title: "${title}"
 ${contextPart}
@@ -195,25 +203,23 @@ ${contextPart}
 Task: Write a short, natural, and engaging comment in Vietnamese (1-2 sentences).
 Instructions:
 - If visual context is present, use it. If not, rely heavily on the Title.
-- Tone: Casual, friendly, young internet user (gen Z).
+- ${customInstruction}
 - AVOID generic phrases like "Video hữu ích", "Cảm ơn", "Hay quá".
 - If the title mentions games/bosses (e.g. "đánh boss"), comment about the difficulty or skill.
 - ONLY return the comment text. No quotes.`;
 
     const textPayload = {
-      model: "deepseek-chat", 
-      messages: [
-        { role: "system", content: "You are a helpful assistant." },
-        { role: "user", content: textPrompt }
-      ],
+      model: "deepseek-r1:latest", 
+      prompt: textPrompt,
       stream: false
     };
 
-    // ... (DeepSeek request logic)
     try {
-      const textResponse = await axios.post(LOCAL_AI_URL, textPayload, { headers: { 'Content-Type': 'application/json' }, timeout: 45000 }); // Increased timeout
-      if (textResponse.data && textResponse.data.choices) {
-         const comment = textResponse.data.choices[0].message.content.trim().replace(/^"|"$/g, '');
+      const textResponse = await axios.post(LOCAL_AI_URL, textPayload, { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }); // Increased timeout
+      if (textResponse.data && textResponse.data.response) {
+         // Cleanup thinking tags <think>...</think> if present in R1 output
+         let comment = textResponse.data.response.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+         comment = comment.replace(/^"|"$/g, '');
          console.log(`Generated Comment: "${comment}"`);
          return comment;
       }
@@ -229,6 +235,7 @@ Instructions:
     return generateSmartFallback(title);
   }
 }
+
 
 /**
  * Generates a relevant comment based on title keywords when AI fails.
