@@ -18,6 +18,11 @@ export async function click(page, params = {}) {
 
   if (selector) {
     target = page.locator(selector).first();
+  } else if (params.text) {
+    console.log(`Searching for element with text: "${params.text}"`);
+    // Try multiple strategies for text matching
+    // 1. Exact/Partial text match
+    target = page.getByText(params.text, { exact: false }).first();
   } else if (params.type === 'video') {
     // Target video results: STRICT YouTube links or video thumbnails
     // Avoid Clicking "AI Overview" or "People also ask"
@@ -30,8 +35,33 @@ export async function click(page, params = {}) {
     console.log('Searching for STRICT video results (youtube.com)...');
   } else {
     // Default to first Google result if no selector
-    // Exclude "People also ask" (often inside .related-question-pair) and AI overviews if possible
-    target = page.locator('#search .g a[href]:not([href*="google.com"])').first();
+    // Try multiple strategies to find the first clickable search result
+    console.log('Finding first search result using multiple strategies...');
+    
+    const strategies = [
+      // Strategy 1: Standard search result link (.g is Google's result container)
+      '#search .g a[href]:not([href*="google.com"])',
+      // Strategy 2: Any link in search results area (broader)
+      '#search a[href]:not([href*="google.com"]):not([href*="#"])',
+      // Strategy 3: Main region links (fallback for different layouts)
+      '[role="main"] a[href]:not([href*="google.com"]):not([href*="#"])',
+      // Strategy 4: Any h3 link (headline links)
+      'h3 a[href]:not([href*="google.com"])'
+    ];
+    
+    for (const selector of strategies) {
+      const candidate = page.locator(selector).first();
+      if (await candidate.isVisible()) {
+        target = candidate;
+        console.log(`Found target using selector: ${selector}`);
+        break;
+      }
+    }
+    
+    if (!target) {
+      console.warn('No suitable search result found with any strategy. Using first strategy as fallback.');
+      target = page.locator(strategies[0]).first();
+    }
   }
 
   if (await target.isVisible()) {
