@@ -37,7 +37,66 @@ export class SessionManager {
     return this.sessionId;
   }
 
-  // ... (keep intermediate methods: getElapsedTime, getRemainingTime, hasReachedMinimum, updateContext, isStuckOnSameUrl, scanPageContent, recordAction) ...
+  /**
+   * Get elapsed time in milliseconds
+   */
+  getElapsedTime() {
+    if (!this.startTime) return 0;
+    return Date.now() - this.startTime;
+  }
+
+  /**
+   * Get remaining time to reach minimum duration (in milliseconds)
+   */
+  getRemainingTime() {
+    const elapsed = this.getElapsedTime();
+    const remaining = this.minDurationMs - elapsed;
+    return Math.max(0, remaining);
+  }
+
+  /**
+   * Check if minimum duration has been reached
+   */
+  hasReachedMinimum() {
+    return this.getElapsedTime() >= this.minDurationMs;
+  }
+
+  /**
+   * Update current context based on URL
+   */
+  updateContext(url) {
+    this.currentContext.url = url;
+    
+    try {
+      const urlObj = new URL(url);
+      this.currentContext.domain = urlObj.hostname;
+      
+      // Detect page type based on domain
+      if (urlObj.hostname.includes('youtube.com')) {
+        this.currentContext.pageType = url.includes('/watch') ? 'youtube_video' : 'youtube_home';
+      } else if (urlObj.hostname.includes('github.com')) {
+        this.currentContext.pageType = url.match(/\/[^\/]+\/[^\/]+$/) ? 'github_repo' : 'github_general';
+      } else if (urlObj.hostname.includes('news') || urlObj.hostname.includes('article')) {
+        this.currentContext.pageType = 'news';
+      } else {
+        this.currentContext.pageType = 'general_website';
+      }
+      
+      console.log(`[SessionManager] Context updated: ${this.currentContext.pageType} @ ${this.currentContext.domain}`);
+    } catch (e) {
+      console.warn('[SessionManager] Failed to parse URL:', e.message);
+    }
+  }
+  
+  /**
+   * Check if stuck on same URL (for recovery)
+   */
+  isStuckOnSameUrl() {
+    if (this.actionHistory.length < 4) return false;
+    const recent = this.actionHistory.slice(-4);
+    const urls = recent.map(a => a.url);
+    return urls.every(u => u === urls[0]);
+  }
 
   /**
    * Scan page content to detect available elements (DYNAMIC - not domain-based)
