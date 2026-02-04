@@ -260,7 +260,7 @@ async function main() {
         console.log(`\n=== SESSION MODE ENABLED (${minSessionMinutes} min minimum) ===\n`);
         
         // Use the original prompt as the User Goal
-        const userGoal = parsedArgs.prompt || "Browse naturally and interestingly";
+        const userGoal = prompt || "Browse naturally and interestingly";
         
         const session = new SessionManager(minSessionMinutes, userGoal);
         session.start(page.url(), userGoal);
