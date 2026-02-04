@@ -49,18 +49,35 @@ export async function click(page, params = {}) {
       'h3 a[href]:not([href*="google.com"])'
     ];
     
-    for (const selector of strategies) {
-      const candidate = page.locator(selector).first();
-      if (await candidate.isVisible()) {
-        target = candidate;
-        console.log(`Found target using selector: ${selector}`);
-        break;
+    // Try strategies with retry logic
+    let maxAttempts = 3;
+    let attemptDelay = 2000; // Wait 2 seconds between attempts
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        console.log(`Retry attempt ${attempt}/${maxAttempts - 1} - waiting ${attemptDelay}ms for results...`);
+        await page.waitForTimeout(attemptDelay);
+      }
+      
+      for (const selector of strategies) {
+        const candidate = page.locator(selector).first();
+        if (await candidate.isVisible()) {
+          target = candidate;
+          console.log(`Found target using selector: ${selector}`);
+          break;
+        }
+      }
+      
+      if (target) {
+        break; // Found target, exit retry loop
       }
     }
     
     if (!target) {
-      console.warn('No suitable search result found with any strategy. Using first strategy as fallback.');
+      console.warn('No suitable search result found with any strategy after retries. Using first strategy as final attempt.');
       target = page.locator(strategies[0]).first();
+      // Wait a bit more for it to appear
+      await page.waitForTimeout(3000);
     }
   }
 

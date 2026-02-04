@@ -156,6 +156,35 @@ Example output: {
       foundMarkers.sort((a, b) => a.index - b.index);
       
       console.log('Detected Markers (Pre-filter):', JSON.stringify(foundMarkers));
+      
+      // Filter out false positives: "search" in compound phrases
+      foundMarkers = foundMarkers.filter((m) => {
+        if (m.key === 'search') {
+          // Get context around the match (20 chars before and after)
+          const start = Math.max(0, m.index - 5);
+          const end = Math.min(prompt.length, m.index + m.length + 10);
+          const context = prompt.substring(start, end).toLowerCase();
+          
+          // Skip if "search" is part of a compound noun/phrase
+          const compoundPhrases = [
+            'search result',
+            'search engine',
+            'search box',
+            'search bar',
+            'search button',
+            'search field',
+            'search page'
+          ];
+          
+          for (const phrase of compoundPhrases) {
+            if (context.includes(phrase)) {
+              console.log(`Skipping 'search' in compound phrase: "${context.trim()}"`);
+              return false; // Filter out this match
+            }
+          }
+        }
+        return true; // Keep this match
+      });
 
       // Deduplicate overlapping markers
       foundMarkers = foundMarkers.filter((m, i) => {
@@ -169,10 +198,10 @@ Example output: {
           // const distance = Math.abs(m.index - other.index);
           // const isProximityMatch = distance < 11 && oi < i; 
 
-          // Repeated intent deduplication: skip if same key already found very close by (e.g., within 5 chars)
-          // This prevents "if not login then login" from creating two login actions
+          // Repeated intent deduplication: skip if same key already found close by
+          // Increased range to 10 chars to catch "Read/Browse"
           const distance = Math.abs(m.index - other.index);
-          const isRepeatedIntent = m.key === other.key && distance < 5 && oi < i;
+          const isRepeatedIntent = m.key === other.key && distance < 10 && oi < i;
 
           return covers || isRepeatedIntent;
         });
@@ -192,8 +221,8 @@ Example output: {
         const lookAheadContext = prompt.substring(current.index, Math.min(prompt.length, current.index + 50)).toLowerCase();
 
         if (current.key === 'search') {
-          // Extract keyword, stopping at common separators including "and", "then"
-          let keyword = segmentContext.split(/[,;.]|rồi|xong|sau\s+đó|and|then/i)[0].trim();
+          // Extract keyword, stopping at common separators (require spaces around "and"/"then")
+          let keyword = segmentContext.split(/[,;.]|\s+rồi\s+|\s+xong\s+|\s+sau\s+đó\s+|,\s*and\s+|,\s*then\s+|\s+then\s+|\s+and\s+/i)[0].trim();
           
           // Remove leading "for" from "search for X"
           keyword = keyword.replace(/^for\s+/i, '').trim();

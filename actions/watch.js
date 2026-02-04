@@ -13,14 +13,39 @@ export async function watch(page, params = {}) {
 
   // 1. Parse Duration
   let durationSeconds = 60;
+  
   if (typeof durationParam === 'string') {
-    const rangeMatch = durationParam.match(/(\d+)-(\d+)/);
-    if (rangeMatch) {
-      const min = parseInt(rangeMatch[1]);
-      const max = parseInt(rangeMatch[2]);
-      durationSeconds = Math.floor(Math.random() * (max - min + 1)) + min;
+    if (durationParam.includes('%')) {
+        // Percentage based duration (requires video metadata)
+        console.log(`Percentage duration detected: ${durationParam}. Waiting for video metadata...`);
+        try {
+            await page.waitForSelector('video', { timeout: 15000 });
+            const videoDuration = await page.evaluate(async () => {
+                const v = document.querySelector('video');
+                if (!v) return 600; // Default if not found
+                if (isNaN(v.duration) || v.duration === Infinity) {
+                    // Try to wait a bit for metadata
+                    await new Promise(r => setTimeout(r, 2000)); 
+                }
+                return v.duration || 600;
+            });
+            
+            const pct = parseInt(durationParam) / 100;
+            durationSeconds = Math.floor(videoDuration * pct);
+            console.log(`Video duration: ${videoDuration}s. Calculated watch time (${durationParam}): ${durationSeconds}s`);
+        } catch (e) {
+            console.warn('Failed to get video duration for percentage calculation:', e.message);
+            durationSeconds = 60;
+        }
     } else {
-      durationSeconds = parseInt(durationParam) || 60;
+        const rangeMatch = durationParam.match(/(\d+)-(\d+)/);
+        if (rangeMatch) {
+            const min = parseInt(rangeMatch[1]);
+            const max = parseInt(rangeMatch[2]);
+            durationSeconds = Math.floor(Math.random() * (max - min + 1)) + min;
+        } else {
+            durationSeconds = parseInt(durationParam) || 60;
+        }
     }
   } else if (typeof durationParam === 'number') {
     durationSeconds = durationParam;

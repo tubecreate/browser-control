@@ -53,23 +53,87 @@ export async function search(page, params) {
   if (!isSearchEngine && currentUrl !== 'about:blank') {
       console.log(`Attempting internal search on ${new URL(currentUrl).hostname}...`);
       try {
-          // Common internal search selectors
+          // Comprehensive internal search selectors (covers most websites)
           const searchSelectors = [
+              // Type-based
               'input[type="search"]',
-              'input[name="q"]', // GitHub, Google
+              
+              // Name-based (common patterns)
+              'input[name="q"]',           // Google, GitHub, many sites
               'input[name="query"]',
+              'input[name="search"]',
+              'input[name="s"]',           // WordPress default
+              'input[name="keyword"]',
+              'input[name="searchTerm"]',
+              
+              // Placeholder-based (multilingual)
               'input[placeholder*="Search" i]',
-              'input[placeholder*="Tìm" i]',
-              'button[aria-label="Search"]', // Sometimes a button opens a modal
-              'svg[aria-label="Search"]'
+              'input[placeholder*="Tìm" i]',      // Vietnamese
+              'input[placeholder*="搜索" i]',     // Chinese
+              'input[placeholder*="検索" i]',     // Japanese
+              'input[placeholder*="Buscar" i]',   // Spanish
+              
+              // Class-based (common naming conventions)
+              'input[class*="search" i]',
+              'input[class*="query" i]',
+              
+              // ID-based
+              'input[id*="search" i]',
+              'input[id*="query" i]',
+              '#search-input',
+              '#searchbox',
+              '#q',
+              
+              // ARIA attributes
+              'input[aria-label*="search" i]',
+              'input[role="searchbox"]',
+              
+              // Generic text inputs in search containers
+              '.search input[type="text"]',
+              '#search input[type="text"]',
+              '[role="search"] input',
+              
+              // Buttons/Icons that might open search (click to reveal)
+              'button[aria-label*="Search" i]',
+              'button[class*="search" i]',
+              'svg[aria-label*="Search" i]',
+              'a[aria-label*="Search" i]'
           ];
           
           let searchInput = null;
+          let searchButton = null;
+          
           for (const sel of searchSelectors) {
               const el = page.locator(sel).first();
               if (await el.isVisible()) {
-                  searchInput = el;
-                  break;
+                  const tagName = await el.evaluate(node => node.tagName.toLowerCase());
+                  
+                  if (tagName === 'input') {
+                      searchInput = el;
+                      console.log(`Found internal search input: ${sel}`);
+                      break;
+                  } else if (tagName === 'button' || tagName === 'svg' || tagName === 'a') {
+                      // Click button/icon to reveal search
+                      searchButton = el;
+                      console.log(`Found search trigger button: ${sel}`);
+                      break;
+                  }
+              }
+          }
+
+          // If found a button, click it to reveal search input
+          if (searchButton && !searchInput) {
+              await searchButton.click();
+              await page.waitForTimeout(500);
+              
+              // Try to find the revealed input
+              for (const sel of searchSelectors.slice(0, 15)) { // Try input selectors only
+                  const el = page.locator(sel).first();
+                  if (await el.isVisible()) {
+                      searchInput = el;
+                      console.log(`Found revealed search input: ${sel}`);
+                      break;
+                  }
               }
           }
 
@@ -137,4 +201,9 @@ export async function search(page, params) {
     console.warn('Search results took too long to load or blocked by Captcha.');
   });
   console.log('Search results loaded.');
+  
+  // Human-like delay: simulate reading search results before clicking
+  const readingDelay = 2000 + Math.random() * 3000; // 2-5 seconds
+  console.log(`Simulating reading time: ${Math.round(readingDelay)}ms...`);
+  await page.waitForTimeout(readingDelay);
 }

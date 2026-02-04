@@ -10,6 +10,7 @@ import * as loginAction from './actions/login.js';
 import * as commentAction from './actions/comment.js';
 import * as visualScanAction from './actions/visual_scan.js';
 import * as watchAction from './actions/watch.js';
+import { SessionManager } from './session_manager.js';
 
 // Action Registry
 const ACTION_REGISTRY = {
@@ -35,6 +36,8 @@ async function main() {
   const isNewProfile = args['new-profile'] || false;
   const exportCookies = args['export-cookies'] || false;
   const isManual = args['manual'] || false;
+  const sessionMode = args['session'] || false; // Enable generative session mode
+  const minSessionMinutes = parseInt(args['session-duration']) || 10;
   const cliTags = args['tags']; // Raw CLI arg for overrides
 
   // 1. Determine Action Sequence & Profile Override
@@ -46,6 +49,13 @@ async function main() {
         const ai = new AIEngine();
         const result = await ai.planActions(prompt);
         actionSequence = result.actions;
+        
+        console.log('\n--- 🤖 AI PLANNED ACTIONS ---');
+        actionSequence.forEach((step, idx) => {
+             console.log(`${idx + 1}. [${step.action.toUpperCase()}] ${JSON.stringify(step.params)}`);
+        });
+        console.log('-----------------------------\n');
+
         if (result.profile) {
           console.log(`\n>>> Profile switch requested via prompt: ${result.profile}`);
           profileName = result.profile;
@@ -61,7 +71,13 @@ async function main() {
           { action: 'browse', params: { iterations: 3 } }
         ];
       }
+      
+      if (args['dry-run']) {
+          console.log('Detected --dry-run flag. Exiting after planning.');
+          process.exit(0);
+      }
   }
+
 
   const profilePath = path.resolve(`./profiles/${profileName}`);
   console.log(`Target Profile: ${profileName} (${profilePath})`);
@@ -100,7 +116,7 @@ async function main() {
 
       // 2. Browser Initialization
       console.log('Fetching fingerprint...');
-      plugin.setServiceKey('');
+      plugin.setServiceKey('dLeV7LSYY387fh9bVhxxxZcQVVQ4kR6eXSzOdnNJRfDj9eQ48be5ljPBzyBvPxfr');
 
       let fingerprint;
       const fingerprintPath = path.join(profilePath, 'fingerprint.json');
@@ -199,6 +215,7 @@ async function main() {
       }
 
       // 4. Execute Action Sequence
+      let initialActionsSucceeded = true;
       for (const step of actionSequence) {
         const actionFn = ACTION_REGISTRY[step.action];
         if (actionFn) {
@@ -208,6 +225,13 @@ async function main() {
             await actionFn(page, { ...step.params, isRetry });
           } catch (actionError) {
             console.error(`Error in action '${step.action}': ${actionError.message}`);
+            
+            // If session mode is enabled, log error but continue to session
+            if (sessionMode) {
+              console.log('[Session] Initial action failed, but session mode will continue with recovery...');
+              initialActionsSucceeded = false;
+              break; // Exit initial sequence, let session take over
+            }
             
             // --- SELF-HEALING LOGIC ---
             console.log('Attempting Visual Error Diagnosis...');
@@ -230,6 +254,97 @@ async function main() {
       }
 
       console.log('\nAll actions completed successfully.');
+      
+      // 5. Session Mode - Continue generating actions until minimum duration reached
+      if (sessionMode) {
+        console.log(`\n=== SESSION MODE ENABLED (${minSessionMinutes} min minimum) ===\n`);
+        
+        // Use the original prompt as the User Goal
+        const userGoal = parsedArgs.prompt || "Browse naturally and interestingly";
+        
+        const session = new SessionManager(minSessionMinutes, userGoal);
+        session.start(page.url(), userGoal);
+        
+        while (!session.hasReachedMinimum()) {
+          try {
+            // Update context from current page
+            session.updateContext(page.url());
+            
+            // Check if stuck on same URL
+            if (session.isStuckOnSameUrl()) {
+              console.log('[Session] Detected stuck on same URL. Triggering recovery...');
+              throw new Error('Stuck on same URL - triggering recovery');
+            }
+            
+            // DYNAMIC: Scan page content to detect available elements
+            const pageContent = await session.scanPageContent(page);
+            
+            // Generate next action based on actual page content (await async AI generation)
+            const nextAction = await session.generateNextAction(pageContent);
+            
+            if (!nextAction) {
+              console.log('[Session] No more actions. Ending session.');
+              break;
+            }
+            
+            // Display session status
+            const status = session.getStatus();
+            console.log(`\n[Session] ${status.elapsedMinutes}/${minSessionMinutes} min | Actions: ${status.actionsCompleted} | Page: ${status.pageType}`);
+            console.log(`[Session] Next: ${nextAction.action}`, nextAction.params);
+            
+            // Execute the action
+            const actionFn = ACTION_REGISTRY[nextAction.action];
+            if (actionFn) {
+              await actionFn(page, { ...nextAction.params, isRetry });
+              session.recordAction(nextAction.action, nextAction.params);
+            } else {
+              console.warn(`[Session] Unknown action: ${nextAction.action}`);
+            }
+            
+            // Update context after action (URL may have changed)
+            await page.waitForTimeout(1000); // Brief pause for page to stabilize
+            session.updateContext(page.url());
+            
+          } catch (sessionError) {
+            console.error(`[Session] Error during action: ${sessionError.message}`);
+            console.log('[Session] Recovering by starting a new task...');
+            
+            // Recovery strategy: Navigate to a safe page and start fresh
+            try {
+              const currentUrl = page.url();
+              
+              // If we're stuck on an error page or the same URL, navigate to a fresh start
+              if (sessionError.message.includes('not visible') || sessionError.message.includes('Target') || sessionError.message.includes('closed')) {
+                const recoveryActions = [
+                  { url: 'https://www.youtube.com', type: 'youtube_home' },
+                  { url: 'https://news.google.com', type: 'news' },
+                  { url: 'https://github.com/trending', type: 'github_general' }
+                ];
+                
+                const recovery = recoveryActions[Math.floor(Math.random() * recoveryActions.length)];
+                console.log(`[Session] Navigating to ${recovery.url} to recover...`);
+                
+                await page.goto(recovery.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                session.updateContext(page.url());
+                
+                console.log(`[Session] Recovery successful. Context: ${session.currentContext.pageType}`);
+              }
+            } catch (recoveryError) {
+              console.warn(`[Session] Recovery navigation failed: ${recoveryError.message}`);
+            }
+            
+            // Brief pause before continuing
+            await page.waitForTimeout(3000);
+          }
+        }
+        
+        const finalStatus = session.end();
+        console.log('\n=== SESSION COMPLETED ===');
+        console.log(`Duration: ${finalStatus.elapsedMinutes} minutes`);
+        console.log(`Actions: ${finalStatus.actionsCompleted}`);
+        console.log(`Final URL: ${finalStatus.currentUrl}`);
+      }
+      
       success = true;
 
     } catch (error) {
@@ -263,11 +378,15 @@ async function main() {
   if (success) {
     process.exit(0);
   } else {
-    process.exit(1);
+    console.error('\n>>> Process finished with FAILURE status.');
+    console.log('Closing in 20 seconds...');
+    setTimeout(() => process.exit(1), 20000);
   }
 }
 
 main().catch((err) => {
+  console.error('\n!!! CRITICAL ERROR !!!');
   console.error(err);
-  process.exit(1);
+  console.log('\nClosing in 20 seconds...');
+  setTimeout(() => process.exit(1), 20000);
 });
