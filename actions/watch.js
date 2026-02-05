@@ -15,19 +15,15 @@ export async function watch(page, params = {}) {
   let durationSeconds = 60;
   
   if (typeof durationParam === 'string') {
-        if (durationParam.includes('%')) {
+    if (durationParam.includes('%')) {
         // Percentage based duration (requires video metadata)
         console.log(`Percentage duration detected: ${durationParam}. Waiting for video metadata...`);
         try {
-            await page.waitForSelector('video', { timeout: 10000 }); // Wait 10s for slow networks
+            await page.waitForSelector('video', { timeout: 5000 }); // Wait 5s
             const videoDuration = await page.evaluate(async () => {
                 const v = document.querySelector('video');
-                if (!v) return 600; // Default if not found
-                if (isNaN(v.duration) || v.duration === Infinity) {
-                    // Try to wait a bit for metadata
-                    await new Promise(r => setTimeout(r, 1000)); 
-                }
-                return v.duration || 600;
+                if (!v) return 60; // Default
+                return v.duration || 60;
             });
             
             const pct = parseInt(durationParam) / 100;
@@ -51,30 +47,41 @@ export async function watch(page, params = {}) {
     durationSeconds = durationParam;
   }
 
-  console.log(`Starting 'watch' action. Planning to watch for ~${durationSeconds} seconds.`);
+  // Cap default duration to a sane value if it's too high on article pages
+  if (durationSeconds > 300) {
+      console.log(`Capping duration from ${durationSeconds}s to 300s for safety.`);
+      durationSeconds = 300;
+  }
 
-  // 2. Ensure Video is Playing
+  // 2. Ensure Video is Playing & Visible
   try {
-    await page.waitForSelector('video', { timeout: 10000 }); // Wait 10s for playback
-    const isPlaying = await page.evaluate(() => {
+    const videoLocator = page.locator('video');
+    await page.waitForSelector('video', { timeout: 5000, state: 'visible' }).catch(() => null);
+    
+    const videoState = await page.evaluate(() => {
       const v = document.querySelector('video');
-      return v && !v.paused;
+      if (!v) return { found: false };
+      const rect = v.getBoundingClientRect();
+      const isVisible = rect.width > 100 && rect.height > 100 && v.offsetParent !== null;
+      return { found: true, isVisible, isPlaying: !v.paused };
     });
 
-    if (!isPlaying) {
+    if (!videoState.found || !videoState.isVisible) {
+      console.log('No visible video found. Signalling fallback to browse...');
+      throw new Error('NO_VIDEO_FOUND');
+    }
+
+    if (!videoState.isPlaying) {
       console.log('Video paused, attempting to play...');
-      await page.keyboard.press('k'); // YouTube shortcut for play/pause
-      // Fallback click center
-      const video = page.locator('video').first();
-      if (await video.isVisible()) {
-          const box = await video.boundingBox();
-          if (box) await humanMove(page, box.x + box.width / 2, box.y + box.height / 2);
-          await page.click('video');
-      }
+      await page.keyboard.press('k'); // YouTube shortcut
+      await page.waitForTimeout(1000);
     }
   } catch (e) {
+    if (e.message === 'NO_VIDEO_FOUND') throw e;
     console.warn('Could not confirm video playback, proceeding anyway:', e.message);
   }
+
+  console.log(`Starting 'watch' action. Planning to watch for ~${durationSeconds} seconds.`);
 
   // 3. Watch Loop
   const startTime = Date.now();

@@ -38,6 +38,7 @@ async function main() {
   const isManual = args['manual'] || false;
   const sessionMode = args['session'] || false; // Enable generative session mode
   const minSessionMinutes = parseInt(args['session-duration']) || 10;
+  const aiModel = args['ai-model'] || 'qwen:latest'; // NEW: AI model for browser automation
   const cliTags = args['tags']; // Raw CLI arg for overrides
 
   // 1. Determine Action Sequence & Profile Override
@@ -262,7 +263,7 @@ async function main() {
         // Use the original prompt as the User Goal
         const userGoal = prompt || "Browse naturally and interestingly";
         
-        const session = new SessionManager(minSessionMinutes, userGoal);
+        const session = new SessionManager(minSessionMinutes, userGoal, aiModel);
         session.start(page.url(), userGoal);
         
         while (!session.hasReachedMinimum()) {
@@ -295,8 +296,21 @@ async function main() {
             // Execute the action
             const actionFn = ACTION_REGISTRY[nextAction.action];
             if (actionFn) {
-              await actionFn(page, { ...nextAction.params, isRetry });
-              session.recordAction(nextAction.action, nextAction.params);
+              try {
+                await actionFn(page, { ...nextAction.params, isRetry });
+                session.recordAction(nextAction.action, nextAction.params);
+              } catch (actionError) {
+                if (actionError.message === 'NO_VIDEO_FOUND') {
+                  console.log('[Session] Fallback: No video found during watch. Switching to browse behavior...');
+                  const browseFn = ACTION_REGISTRY['browse'];
+                  if (browseFn) {
+                    await browseFn(page, { iterations: 10 });
+                    session.recordAction('browse', { iterations: 10, note: 'fallback from watch' });
+                  }
+                } else {
+                  throw actionError; // Re-throw other errors
+                }
+              }
             } else {
               console.warn(`[Session] Unknown action: ${nextAction.action}`);
             }
@@ -307,6 +321,15 @@ async function main() {
             
           } catch (sessionError) {
             console.error(`[Session] Error during action: ${sessionError.message}`);
+            
+            // CRITICAL: Detect browser crash - cannot be recovered in-session
+            if (sessionError.message.includes('Page crashed') || 
+                sessionError.message.includes('Target crashed') ||
+                sessionError.message.includes('Browser closed')) {
+              console.error('[Session] CRITICAL: Browser crashed. Restarting browser required.');
+              throw new Error('BROWSER_CRASHED'); // Signal outer retry loop to restart
+            }
+            
             console.log('[Session] Recovering by starting a new task...');
             
             // Recovery strategy: Navigate to a safe page and start fresh
@@ -314,7 +337,10 @@ async function main() {
               const currentUrl = page.url();
               
               // If we're stuck on an error page or the same URL, navigate to a fresh start
-              if (sessionError.message.includes('not visible') || sessionError.message.includes('Target') || sessionError.message.includes('closed')) {
+              if (sessionError.message.includes('Stuck on same URL') ||
+                  sessionError.message.includes('not visible') || 
+                  sessionError.message.includes('Target') || 
+                  sessionError.message.includes('closed')) {
                 const recoveryActions = [
                   { url: 'https://www.youtube.com', type: 'youtube_home' },
                   { url: 'https://news.google.com', type: 'news' },
@@ -325,12 +351,19 @@ async function main() {
                 console.log(`[Session] Navigating to ${recovery.url} to recover...`);
                 
                 await page.goto(recovery.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                session.updateContext(recovery.url);
+                session.resetStuckCounter(); // Reset stuck detection after recovery
                 session.updateContext(page.url());
                 
                 console.log(`[Session] Recovery successful. Context: ${session.currentContext.pageType}`);
               }
             } catch (recoveryError) {
               console.warn(`[Session] Recovery navigation failed: ${recoveryError.message}`);
+              
+              // If recovery also fails with crash, propagate up
+              if (recoveryError.message.includes('crashed')) {
+                throw new Error('BROWSER_CRASHED');
+              }
             }
             
             // Brief pause before continuing
@@ -348,7 +381,16 @@ async function main() {
       success = true;
 
     } catch (error) {
-      if (error.message === 'CAPTCHA_DETECTED' && attempt < maxAttempts) {
+      if (error.message === 'BROWSER_CRASHED' && attempt < maxAttempts) {
+        console.error('\n>>> BROWSER CRASHED! Restarting with new fingerprint...');
+        // Close current context if still available
+        try {
+          if (context) await context.close();
+        } catch (e) {
+          // Context already dead, ignore
+        }
+        attempt++;
+      } else if (error.message === 'CAPTCHA_DETECTED' && attempt < maxAttempts) {
         console.error('\n>>> CAPTCHA detected on first attempt. Retrying...');
         attempt++;
       } else if (error.message === 'FINGERPRINT_RETRY' && attempt < maxAttempts) {

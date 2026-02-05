@@ -6,7 +6,7 @@ import axios from 'axios';
  */
 
 export class SessionManager {
-  constructor(minDurationMinutes = 10, userGoal = null) {
+  constructor(minDurationMinutes = 10, userGoal = null, aiModel = 'qwen:latest') {
     this.minDurationMs = minDurationMinutes * 60 * 1000;
     this.sessionId = null;
     this.startTime = null;
@@ -17,6 +17,7 @@ export class SessionManager {
       domain: null
     };
     this.userGoal = userGoal;
+    this.aiModel = aiModel; // NEW: Configurable AI model
     this.aiUrl = 'http://localhost:5295/api/v1/localai/chat/completions';
   }
 
@@ -35,6 +36,19 @@ export class SessionManager {
     
     console.log(`[SessionManager] Started session ${this.sessionId} (Goal: "${this.userGoal || 'Browse naturally'}")`);
     return this.sessionId;
+  }
+
+  /**
+   * Record a completed action to history
+   */
+  recordAction(action, params = {}) {
+    this.actionHistory.push({
+      action,
+      params,
+      url: this.currentContext.url,
+      timestamp: Date.now()
+    });
+    console.log(`[SessionManager] Recorded action: ${action}`);
   }
 
   /**
@@ -90,12 +104,24 @@ export class SessionManager {
   
   /**
    * Check if stuck on same URL (for recovery)
+   * Requires at least 5 consecutive actions on the same URL
    */
   isStuckOnSameUrl() {
-    if (this.actionHistory.length < 4) return false;
-    const recent = this.actionHistory.slice(-4);
+    if (this.actionHistory.length < 5) return false;
+    const recent = this.actionHistory.slice(-5);
     const urls = recent.map(a => a.url);
     return urls.every(u => u === urls[0]);
+  }
+
+  /**
+   * Reset stuck counter by clearing recent history (called after recovery)
+   */
+  resetStuckCounter() {
+    // Keep only last 2 actions to maintain some context
+    if (this.actionHistory.length > 2) {
+      this.actionHistory = this.actionHistory.slice(-2);
+    }
+    console.log('[SessionManager] Reset stuck counter');
   }
 
   /**
@@ -127,12 +153,47 @@ export class SessionManager {
           document.querySelector('#captcha') !== null ||
           bodyText.includes("Verify you are human") ||
           bodyText.includes("security check");
+        
+        // Extract Interactive Elements (links, buttons) for AI selection
+        const interactiveElements = [];
+        const targets = document.querySelectorAll('a[href], button, input[type="submit"], [role="button"]');
+        
+        let count = 0;
+        for (const el of targets) {
+          if (count >= 30) break; // Limit to 30 to save tokens
           
+          // Simple visibility check
+          const rect = el.getBoundingClientRect();
+          const text = el.innerText?.trim() || el.textContent?.trim() || '';
+          
+          if (rect.width > 0 && rect.height > 0 && text.length > 2) {
+            interactiveElements.push({
+              text: text.substring(0, 80), // Truncate long text
+              tag: el.tagName.toLowerCase(),
+              href: el.href || null
+            });
+            count++;
+          }
+        }
+        
+        // Video detection: Only count VISIBLE, interactive videos (not background decoration)
+        const videos = document.querySelectorAll('video');
+        let interactiveVideoCount = 0;
+        for (const vid of videos) {
+          const rect = vid.getBoundingClientRect();
+          const isVisible = rect.width > 100 && rect.height > 100; // Substantial size
+          const isInteractive = !vid.muted || vid.controls; // Has controls or not muted
+          if (isVisible && isInteractive) {
+            interactiveVideoCount++;
+          }
+        }
+        
         return {
           isErrorPage,
           hasCaptcha,
-          hasVideo: document.querySelectorAll('video').length > 0,
-          videoCount: document.querySelectorAll('video').length,
+          interactiveElements, // NEW: List of clickable elements
+          hasVideo: interactiveVideoCount > 0, // Only true for real videos
+          videoCount: interactiveVideoCount,
           hasArticles: document.querySelectorAll('article, .post, .article, [role="article"]').length > 0,
           articleCount: document.querySelectorAll('article, .post, .article, [role="article"]').length,
           hasForm: document.querySelectorAll('form').length > 0,
@@ -157,6 +218,7 @@ export class SessionManager {
       return {
         isErrorPage: true,
         hasCaptcha: false,
+        interactiveElements: [], // Empty list on error
         hasVideo: false,
         videoCount: 0,
         hasArticles: false,
@@ -253,40 +315,66 @@ export class SessionManager {
    * Generate action using Local AI based on goal and context
    */
   async generateAIAction(pageContent, remainingMinutes) {
+    // Build list of interactive elements for AI to choose from
+    const elementList = (pageContent?.interactiveElements || [])
+      .map((el, idx) => `${idx + 1}. [${el.tag}] "${el.text}"`)
+      .join('\n');
+    
+    const hasElements = elementList.length > 0;
+
     const context = {
       url: this.currentContext.url,
       domain: this.currentContext.domain,
       pageType: this.currentContext.pageType,
-      visibleElements: pageContent || {},
+      hasVideo: pageContent?.hasVideo || false,
+      hasSearchBox: pageContent?.hasSearchBox || false,
       remainingMinutes,
       recentHistory: this.actionHistory.slice(-3).map(a => `${a.action} on ${a.url}`)
     };
 
+    // Detect if on YouTube to provide specific guidance
+    const isYouTube = context.domain?.includes('youtube.com');
+    const videoLinks = (pageContent?.interactiveElements || []).filter(el => 
+      el.href?.includes('youtube.com/watch')
+    );
+    
+    let contextHint = '';
+    if (isYouTube && videoLinks.length > 0) {
+      contextHint = `\nCONTEXT: You are on YouTube with ${videoLinks.length} video links available. To watch videos, CLICK on a video title link (contains "/watch" in href).`;
+    }
+
     const prompt = `You are an autonomous browser agent.
 User Goal: "${this.userGoal}"
-Current Context: ${JSON.stringify(context, null, 2)}
+Current Context: ${JSON.stringify(context, null, 2)}${contextHint}
 
-Instructions:
-1. Analyze the current page state and history.
-2. Decide the NEXT single browser action to progress towards the goal.
-3. Available actions:
-   - search { keyword: "..." }
-   - click { selector: "..." OR text: "..." } (Make sure element exists in visibleElements)
-   - browse { iterations: 5-10 } (Use this to read content or wait)
-   - watch { duration: "30s" } (If video available)
-4. If the goal is "research" or "browse", alternate between reading (browse) and clicking links.
-5. If on a search engine, click a result.
-6. If on a content page, read it (browse).
+${hasElements ? `AVAILABLE INTERACTIVE ELEMENTS (links/buttons on page):
+${elementList}
+` : 'No interactive elements detected on page.'}
+
+INSTRUCTIONS:
+1. Choose the NEXT action to progress towards the goal.
+2. IF clicking: YOU MUST use the EXACT "text" from the list above (not selector).
+3. IF on a news site, blog, or article (e.g. Investopedia, CNN): Use 'browse' with iterations 5-10 to read the content. 
+4. IF on YouTube search results: CLICK a video title to watch it.
+5. IF watching video (inside video page): Use 'watch' with a reasonable duration like "60s" or "30%".
+6. IF searching: Use simple keywords.
+
+Available actions:
+- search { "keyword": "..." }
+- click { "text": "EXACT TEXT FROM LIST" }
+- browse { "iterations": 5-10 }
+- watch { "duration": "60s" }
 
 Output JSON ONLY: { "action": "...", "params": { ... } }`;
 
     try {
+      console.log(`[SessionManager] Requesting action from AI model: ${this.aiModel}...`);
       const response = await axios.post(this.aiUrl, {
-        model: "deepseek-r1:latest", // Or user preference if we could pass it
+        model: this.aiModel, // Use configured AI model
         messages: [{ role: "user", content: prompt }],
         stream: false,
         temperature: 0.7
-      }, { timeout: 60000 }); // 60s timeout for step decision
+      }, { timeout: 60000 }); // 60s timeout (qwen is fast)
 
       // Parse JSON from response
       let content = response.data?.choices?.[0]?.message?.content;

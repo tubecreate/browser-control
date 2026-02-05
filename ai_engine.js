@@ -64,7 +64,7 @@ Example output: {
           { role: 'user', content: prompt }
         ],
         stream: false
-      }, { timeout: 30000 });
+      }, { timeout: 120000 }); // 120s for DeepSeek-R1 reasoning
 
       let content = response.data.choices[0].message.content;
       console.log('AI Response:', content);

@@ -16,19 +16,29 @@ export async function browse(page, params = {}) {
       return;
     }
 
-    // Random human-like move
-    const x = Math.floor(Math.random() * 800) + 100;
-    const y = Math.floor(Math.random() * 600) + 100;
-    
     try {
+      // Random human-like move
+      const x = Math.floor(Math.random() * 800) + 100;
+      const y = Math.floor(Math.random() * 600) + 100;
       await humanMove(page, x, y);
 
-      // Random scroll
-      const scrollAmount = Math.floor(Math.random() * 400) + 100;
+      // Random scroll (weighted for downward reading)
+      const isUp = Math.random() < 0.15; // 15% chance to scroll back up slightly
+      const scrollAmount = isUp 
+        ? -Math.floor(Math.random() * 200) 
+        : Math.floor(Math.random() * 500) + 200;
+        
       await page.mouse.wheel(0, scrollAmount);
-      console.log(`Scrolled down ${scrollAmount}px`);
+      console.log(`${isUp ? 'Scrolled up' : 'Scrolled down'} ${Math.abs(scrollAmount)}px`);
 
-      await page.waitForTimeout(1000 + Math.random() * 2000);
+      // Natural reading pause (longer occasional pauses)
+      const isLongPause = Math.random() < 0.2;
+      const pauseDuration = isLongPause 
+        ? 5000 + Math.random() * 5000  // 5-10s "deep reading"
+        : 1000 + Math.random() * 2000; // 1-3s "skimming"
+        
+      if (isLongPause) console.log('Taking a moment to read...');
+      await page.waitForTimeout(pauseDuration);
     } catch (e) {
       if (e.message.includes('Target page, context or browser has been closed')) {
         console.warn('Browser closed during browse loop.');
