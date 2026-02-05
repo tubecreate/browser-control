@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getGpuUsage } from './gpu_monitor.js';
 
 /**
  * Session Manager for Generative Browser Sessions
@@ -19,15 +20,23 @@ export class SessionManager {
     this.userGoal = userGoal;
     this.aiModel = aiModel; // NEW: Configurable AI model
     this.aiUrl = 'http://localhost:5295/api/v1/localai/chat/completions';
+    this.lastRefuelTime = 0; // NEW: Track last ChatGPT refuel
+    this.REFUEL_COOLDOWN_MS = 120000; // 2 minutes cooldown
+    this.taskQueue = []; // NEW: Queue for planned actions
   }
 
   /**
    * Start a new session
+   * @param {string} initialUrl
+   * @param {string} userGoal
+   * @param {Array} initialActions - Optional queue of actions to start with
    */
-  start(initialUrl = null, userGoal = null) {
+  start(initialUrl = null, userGoal = null, initialActions = []) {
     this.sessionId = `session_${Date.now()}`;
     this.startTime = Date.now();
     this.actionHistory = [];
+    this.taskQueue = Array.isArray(initialActions) ? [...initialActions] : [];
+    
     if (userGoal) this.userGoal = userGoal;
     
     if (initialUrl) {
@@ -154,23 +163,44 @@ export class SessionManager {
           bodyText.includes("Verify you are human") ||
           bodyText.includes("security check");
         
+        // Popup / Blocking Element Detection
+        const potentialPopups = [];
+        const dismissTerms = [
+          'not interested', 'no thanks', 'close', 'accept', 'agree', 'got it', 
+          'maybe later', 'dismiss', 'i agree', 'allow', 'ok', 'not now',
+          'no', 'reject', 'decline', 'cookie', 'consent', 'i understand'
+        ];
+        
+        const allInteractive = document.querySelectorAll('a[href], button, input[type="submit"], [role="button"]');
+        for (const el of allInteractive) {
+          const text = el.innerText?.trim() || el.textContent?.trim() || el.getAttribute('aria-label') || el.getAttribute('title') || '';
+          const lowerText = text.toLowerCase();
+          
+          if (dismissTerms.some(term => lowerText === term || (lowerText.length < 20 && lowerText.includes(term)))) {
+            const rect = el.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              potentialPopups.push({
+                text: text.substring(0, 40),
+                tag: el.tagName.toLowerCase()
+              });
+            }
+          }
+        }
+
         // Extract Interactive Elements (links, buttons) for AI selection
         const interactiveElements = [];
-        const targets = document.querySelectorAll('a[href], button, input[type="submit"], [role="button"]');
-        
         let count = 0;
-        for (const el of targets) {
-          if (count >= 30) break; // Limit to 30 to save tokens
+        for (const el of allInteractive) {
+          if (count >= 40) break; // Increased limit slightly
           
-          // Simple visibility check
           const rect = el.getBoundingClientRect();
-          const text = el.innerText?.trim() || el.textContent?.trim() || '';
+          const text = el.innerText?.trim() || el.textContent?.trim() || el.getAttribute('aria-label') || el.getAttribute('title') || '';
           
-          if (rect.width > 0 && rect.height > 0 && text.length > 2) {
+          if (rect.width > 0 && rect.height > 0 && text.length > 0) {
             interactiveElements.push({
               text: text.substring(0, 80), // Truncate long text
               tag: el.tagName.toLowerCase(),
-              href: el.href || null
+              href: (el.tagName === 'A' ? el.href : null)
             });
             count++;
           }
@@ -191,8 +221,9 @@ export class SessionManager {
         return {
           isErrorPage,
           hasCaptcha,
-          interactiveElements, // NEW: List of clickable elements
-          hasVideo: interactiveVideoCount > 0, // Only true for real videos
+          potentialPopups, // NEW: List of suspected closing buttons
+          interactiveElements, 
+          hasVideo: interactiveVideoCount > 0, 
           videoCount: interactiveVideoCount,
           hasArticles: document.querySelectorAll('article, .post, .article, [role="article"]').length > 0,
           articleCount: document.querySelectorAll('article, .post, .article, [role="article"]').length,
@@ -208,6 +239,8 @@ export class SessionManager {
       
       if (content.isErrorPage || content.hasCaptcha) {
         console.warn(`[SessionManager] DETECTED ISSUE: Error=${content.isErrorPage}, Captcha=${content.hasCaptcha}`);
+      } else if (content.potentialPopups.length > 0) {
+        console.log(`[SessionManager] POTENTIAL POPUPS DETECTED:`, content.potentialPopups.map(p => p.text));
       } else {
         console.log(`[SessionManager] Scan results:`, content);
       }
@@ -236,15 +269,23 @@ export class SessionManager {
 
   /**
    * Generate next action based on current context and page content
+   * @param {Object} page - Playwright page object
    * @param {Object} pageContent - Results from scanPageContent()
    * Returns: Promise<{ action: string, params: object }>
    */
-  async generateNextAction(pageContent = null) {
+  async generateNextAction(page, pageContent = null) {
     const remainingMs = this.getRemainingTime();
     const remainingMinutes = Math.ceil(remainingMs / 60000);
     
     console.log(`[SessionManager] Generating next action (${remainingMinutes} min remaining)`);
     
+    // Priority 0: Task Queue (Follow the prescribed schedule first)
+    if (this.taskQueue.length > 0) {
+      const nextFromQueue = this.taskQueue.shift();
+      console.log(`[SessionManager] Using action from queue (${this.taskQueue.length} remaining in schedule): ${nextFromQueue.action}`);
+      return [nextFromQueue]; // Return as a single-action chain to maintain sequence
+    }
+
     // ERROR / CAPTCHA RECOVERY
     if (pageContent && (pageContent.isErrorPage || pageContent.hasCaptcha)) {
       console.log('[SessionManager] Critical page issue detected. Triggering NEW TASK recovery.');
@@ -275,30 +316,49 @@ export class SessionManager {
     // AI-Driven Generation (if goal is set)
     if (this.userGoal) {
       try {
-        const aiAction = await this.generateAIAction(pageContent, remainingMinutes);
-        if (aiAction) {
-          // RANDOMIZE DURATION for AI actions if they specify time
-          if (aiAction.params) {
-             if (aiAction.params.duration) {
-               // Randomize duration (e.g. "120s" -> random 80-130s)
-               let seconds = parseInt(aiAction.params.duration);
-               if (!isNaN(seconds)) {
-                 // Random factor between 0.7 and 1.1 (e.g. 100s -> 70s to 110s)
-                 const variance = 0.7 + Math.random() * 0.4; 
-                 const newSeconds = Math.floor(seconds * variance);
-                 aiAction.params.duration = `${newSeconds}s`;
-                 console.log(`[SessionManager] Randomized duration: ${seconds}s -> ${newSeconds}s`);
-               }
-             }
-             if (aiAction.params.iterations) {
-                // Randomize iterations (e.g. 5 -> 3-8)
-                const base = parseInt(aiAction.params.iterations) || 5;
-                const variance = Math.floor(Math.random() * 4) - 2; // -2 to +2
-                aiAction.params.iterations = Math.max(3, base + variance);
-             }
+        // AI Refueling Logic: Check GPU usage and COOLDOWN
+        const gpuUsage = await getGpuUsage();
+        console.log(`[SessionManager] Current GPU Usage: ${gpuUsage}%`);
+        
+        let aiAction = null;
+        const now = Date.now();
+        const timeSinceLastRefuel = now - this.lastRefuelTime;
+
+        if (gpuUsage > 90 && timeSinceLastRefuel > this.REFUEL_COOLDOWN_MS) {
+          console.log('[SessionManager] 🚀 GPU is HIGH. Cooldown passed. Switching to AI Refueling (ChatGPT Web)...');
+          aiAction = await this.generateAIActionViaChatGPTWeb(page, pageContent, remainingMinutes);
+        } else {
+          if (gpuUsage > 90) {
+            console.log(`[SessionManager] GPU is high but cooling down (${Math.ceil((this.REFUEL_COOLDOWN_MS - timeSinceLastRefuel)/1000)}s left). Using Local AI.`);
           }
-          console.log(`[SessionManager] AI Generated Action:`, aiAction);
-          return aiAction;
+          aiAction = await this.generateAIAction(pageContent, remainingMinutes);
+        }
+
+        if (aiAction) {
+          // Normalize to array
+          const actionChain = Array.isArray(aiAction) ? aiAction : [aiAction];
+          
+          for (const action of actionChain) {
+            // RANDOMIZE DURATION for AI actions if they specify time
+            if (action.params) {
+               if (action.params.duration) {
+                 // Randomize duration (e.g. "120s" -> random 80-130s)
+                 let seconds = parseInt(action.params.duration);
+                 if (!isNaN(seconds)) {
+                   const variance = 0.7 + Math.random() * 0.4; 
+                   const newSeconds = Math.floor(seconds * variance);
+                   action.params.duration = `${newSeconds}s`;
+                 }
+               }
+               if (action.params.iterations) {
+                  const base = parseInt(action.params.iterations) || 5;
+                  const variance = Math.floor(Math.random() * 4) - 2;
+                  action.params.iterations = Math.max(3, base + variance);
+               }
+            }
+          }
+          console.log(`[SessionManager] Generated Action Chain (${actionChain.length} steps):`, actionChain);
+          return actionChain;
         }
       } catch (e) {
         console.error('[SessionManager] AI generation failed, falling back to heuristic:', e.message);
@@ -343,29 +403,7 @@ export class SessionManager {
       contextHint = `\nCONTEXT: You are on YouTube with ${videoLinks.length} video links available. To watch videos, CLICK on a video title link (contains "/watch" in href).`;
     }
 
-    const prompt = `You are an autonomous browser agent.
-User Goal: "${this.userGoal}"
-Current Context: ${JSON.stringify(context, null, 2)}${contextHint}
-
-${hasElements ? `AVAILABLE INTERACTIVE ELEMENTS (links/buttons on page):
-${elementList}
-` : 'No interactive elements detected on page.'}
-
-INSTRUCTIONS:
-1. Choose the NEXT action to progress towards the goal.
-2. IF clicking: YOU MUST use the EXACT "text" from the list above (not selector).
-3. IF on a news site, blog, or article (e.g. Investopedia, CNN): Use 'browse' with iterations 5-10 to read the content. 
-4. IF on YouTube search results: CLICK a video title to watch it.
-5. IF watching video (inside video page): Use 'watch' with a reasonable duration like "60s" or "30%".
-6. IF searching: Use simple keywords.
-
-Available actions:
-- search { "keyword": "..." }
-- click { "text": "EXACT TEXT FROM LIST" }
-- browse { "iterations": 5-10 }
-- watch { "duration": "60s" }
-
-Output JSON ONLY: { "action": "...", "params": { ... } }`;
+    const prompt = this._buildAIPrompt(context, contextHint, hasElements, elementList, pageContent?.potentialPopups || []);
 
     try {
       console.log(`[SessionManager] Requesting action from AI model: ${this.aiModel}...`);
@@ -380,16 +418,131 @@ Output JSON ONLY: { "action": "...", "params": { ... } }`;
       let content = response.data?.choices?.[0]?.message?.content;
       if (!content) return null;
 
-      // Extract JSON block
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      // Extract JSON block (array or object)
+      const jsonMatch = content.match(/\[[\s\S]*\]/) || content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        return Array.isArray(parsed) ? parsed : [parsed];
       }
       return null;
     } catch (error) {
       console.warn('[SessionManager] AI Request Error:', error.message);
       return null;
     }
+  }
+
+  /**
+   * AI Refueling: Generate action via ChatGPT website in a new tab
+   */
+  async generateAIActionViaChatGPTWeb(page, pageContent, remainingMinutes) {
+    console.log('[SessionManager] AI REFUELING: Opening ChatGPT in background tab...');
+    
+    const context = {
+      url: this.currentContext.url,
+      domain: this.currentContext.domain,
+      pageType: this.currentContext.pageType,
+      hasVideo: pageContent?.hasVideo || false,
+      hasSearchBox: pageContent?.hasSearchBox || false,
+      remainingMinutes,
+      recentHistory: this.actionHistory.slice(-3).map(a => `${a.action} on ${a.url}`)
+    };
+
+    const elementList = (pageContent?.interactiveElements || [])
+      .map((el, idx) => `${idx + 1}. [${el.tag}] "${el.text}"`)
+      .join('\n');
+    
+    const prompt = this._buildAIPrompt(context, '', elementList.length > 0, elementList, pageContent?.potentialPopups || []);
+    
+    let chatTab = null;
+    try {
+      chatTab = await page.context().newPage();
+      await chatTab.goto('https://chatgpt.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      
+      // Wait for prompt input
+      const inputSelector = '#prompt-textarea';
+      await chatTab.waitForSelector(inputSelector, { timeout: 10000 });
+      
+      // Type and send
+      await chatTab.fill(inputSelector, prompt);
+      await chatTab.keyboard.press('Enter');
+      console.log('[SessionManager] Prompt sent to ChatGPT. Waiting for JSON response...');
+
+      // Wait for response to finish generating (increased to 45 attempts = 90s for long plans)
+      let aiResponse = null;
+      let attempts = 0;
+      while (attempts < 45) {
+        await chatTab.waitForTimeout(2000);
+        const content = await chatTab.content();
+        
+        // Improved Regex: Handle markdown code blocks and find the first array [ ]
+        const jsonBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || content.match(/(\[[\s\S]*?\])/);
+        
+        if (jsonBlockMatch) {
+          try {
+            const rawJson = jsonBlockMatch[1] || jsonBlockMatch[0];
+            const parsed = JSON.parse(rawJson.trim());
+            aiResponse = Array.isArray(parsed) ? parsed : [parsed];
+            
+            if (aiResponse.length >= 2) { // Ensure we got at least a partial chain
+              console.log(`[SessionManager] AI Refueling SUCCESS! Obtained ${aiResponse.length} steps.`);
+              break;
+            }
+          } catch (e) {
+             // Partial or invalid JSON, keep waiting for completion
+          }
+        }
+        attempts++;
+      }
+      
+      if (aiResponse) {
+        console.log('[SessionManager] Closing ChatGPT tab BEFORE execution...');
+        this.lastRefuelTime = Date.now(); // Record success time
+        await chatTab.close();
+        chatTab = null; // Prevent double close in finally
+      }
+
+      return aiResponse;
+    } catch (e) {
+      console.error('[SessionManager] AI Refueling FAILED:', e.message);
+      return null;
+    } finally {
+      if (chatTab) {
+        console.log('[SessionManager] Cleaning up ChatGPT tab...');
+        await chatTab.close();
+      }
+    }
+  }
+
+  _buildAIPrompt(context, contextHint, hasElements, elementList, potentialPopups = []) {
+    const popupInfo = potentialPopups.length > 0 
+      ? `\nSUSPECTED POPUPS/OVERLAYS DETECTED (Dismissal buttons):
+${potentialPopups.map((p, i) => `${i+1}. [${p.tag}] "${p.text}"`).join('\n')}\n`
+      : '';
+
+    return `You are an autonomous browser agent.
+User Goal: "${this.userGoal}"
+Current Context: ${JSON.stringify(context, null, 2)}${contextHint}
+${popupInfo}
+
+${hasElements ? `AVAILABLE INTERACTIVE ELEMENTS (links/buttons on page):
+${elementList}
+` : 'No interactive elements detected on page.'}
+
+INSTRUCTIONS:
+1. Generate an EXTENDED TASK PLAN (array of 10-15 actions) to progress towards the goal.
+2. We MUST minimize AI calls, so provide a VERY LONG chain of logical steps.
+3. IF a popup or cookie banner is visible (see SUSPECTED POPUPS above), PRIORITIZE clicking the dismissal button to close it.
+4. IF clicking: YOU MUST use the EXACT "text" from the lists above.
+5. For News/Articles: Chain multiple 'browse' and 'click' actions on related content.
+6. For YouTube: Chain search, click, and multiple 'watch' and 'browse' steps.
+
+Available actions:
+- search { "keyword": "..." }
+- click { "text": "EXACT TEXT FROM LIST" }
+- browse { "iterations": 5-10 }
+- watch { "duration": "60s" }
+
+Output JSON ONLY (an array of actions): [ { "action": "...", "params": { ... } }, ... ]`;
   }
 
   /**
@@ -406,9 +559,9 @@ Output JSON ONLY: { "action": "...", "params": { ... } }`;
     // Priority 1: Videos (if present)
     if (pageContent.hasVideo && pageContent.videoCount > 0) {
       if (remainingMs > 180000) { // > 3 minutes remaining
-        return { action: 'watch', params: { duration: '30-50%' } };
+        return [{ action: 'watch', params: { duration: '30-50%' } }];
       } else if (rand < 0.6) {
-        return { action: 'watch', params: { duration: '15-25%' } };
+        return [{ action: 'watch', params: { duration: '15-25%' } }];
       }
       // 40% chance: browse or click instead of watching
     }
@@ -416,25 +569,25 @@ Output JSON ONLY: { "action": "...", "params": { ... } }`;
     // Priority 2: Articles/Content (long-form reading)
     if (pageContent.hasArticles && pageContent.articleCount > 0) {
       if (rand < 0.5) {
-        return { action: 'browse', params: { iterations: 10 } };
+        return [{ action: 'browse', params: { iterations: 10 } }];
       } else {
         // Click on another article
-        return { action: 'click', params: { selector: 'article a[href], .post a[href], [role="article"] a[href]' } };
+        return [{ action: 'click', params: { selector: 'article a[href], .post a[href], [role="article"] a[href]' } }];
       }
     }
     
     // Priority 3: Comment sections (engage)
     if (pageContent.hasCommentSection && rand < 0.2) {
-      return { action: 'comment', params: { text: 'Interesting perspective!' } };
+      return [{ action: 'comment', params: { text: 'Interesting perspective!' } }];
     }
     
     // Priority 4: Links (navigation)
     if (pageContent.linkCount > 10) {
       if (rand < 0.6) {
-        return { action: 'browse', params: { iterations: 8 } };
+        return [{ action: 'browse', params: { iterations: 8 } }];
       } else {
         // Click a random link to navigate
-        return { action: 'click', params: { selector: 'a[href]:not([href*="google.com"]):not([href="#"])' } };
+        return [{ action: 'click', params: { selector: 'a[href]:not([href*="google.com"]):not([href="#"])' } }];
       }
     }
     
@@ -442,23 +595,23 @@ Output JSON ONLY: { "action": "...", "params": { ... } }`;
     if (pageContent.hasSearchBox && rand < 0.3) {
       const searchTerms = ['latest news', 'trending', 'popular', 'new', 'best'];
       const term = searchTerms[Math.floor(Math.random() * searchTerms.length)];
-      return { action: 'search', params: { keyword: term } };
+      return [{ action: 'search', params: { keyword: term } }];
     }
     
-    // Fallback: Just browse
-    return { action: 'browse', params: { iterations: 5 } };
+    // Fallback: Return a small sequence of actions instead of just one
+    return [
+      { action: 'browse', params: { iterations: 5 } },
+      { action: 'click', params: { selector: 'a[href]:not([href*="google.com"])' } }
+    ];
   }
 
   /**
    * Fallback action when no content scan available
    */
   _getFallbackAction() {
-    const rand = Math.random();
-    if (rand < 0.7) {
-      return { action: 'browse', params: { iterations: 8 } };
-    } else {
-      return { action: 'click', params: { selector: 'a[href]:not([href*="google.com"])' } };
-    }
+    return [
+      { action: 'browse', params: { iterations: 10 } }
+    ];
   }
 
   /**

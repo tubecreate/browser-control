@@ -20,9 +20,17 @@ export async function click(page, params = {}) {
     target = page.locator(selector).first();
   } else if (params.text) {
     console.log(`Searching for element with text: "${params.text}"`);
-    // Try multiple strategies for text matching
     // 1. Exact/Partial text match
     target = page.getByText(params.text, { exact: false }).first();
+    
+    // 2. Fallback: Search in attributes (aria-label, title) if text match not visible
+    if (!(await target.isVisible().catch(() => false))) {
+       const attrSelector = `[aria-label*="${params.text}" i], [title*="${params.text}" i]`;
+       const attrTarget = page.locator(attrSelector).first();
+       if (await attrTarget.isVisible().catch(() => false)) {
+          target = attrTarget;
+       }
+    }
   } else if (params.type === 'video') {
     // Target video results: STRICT YouTube links or video thumbnails
     // Avoid Clicking "AI Overview" or "People also ask"

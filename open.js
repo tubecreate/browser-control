@@ -46,8 +46,9 @@ async function main() {
   let profileName = args.profile || 'default';
   
   if (!exportCookies && !isManual) { // Skip planning if exporting cookies or manual mode
-      if (prompt) {
-        const ai = new AIEngine();
+      if (prompt) { 
+        // Always plan initially to satisfy user's specific prompt/schedule
+        const ai = new AIEngine(aiModel);
         const result = await ai.planActions(prompt);
         actionSequence = result.actions;
         
@@ -215,46 +216,40 @@ async function main() {
         return process.exit(0);
       }
 
-      // 4. Execute Action Sequence
-      let initialActionsSucceeded = true;
-      for (const step of actionSequence) {
-        const actionFn = ACTION_REGISTRY[step.action];
-        if (actionFn) {
-          console.log(`\n--- Executing: ${step.action} ---`);
-          try {
-            // Pass isRetry down to actions
-            await actionFn(page, { ...step.params, isRetry });
-          } catch (actionError) {
-            console.error(`Error in action '${step.action}': ${actionError.message}`);
-            
-            // If session mode is enabled, log error but continue to session
-            if (sessionMode) {
-              console.log('[Session] Initial action failed, but session mode will continue with recovery...');
-              initialActionsSucceeded = false;
-              break; // Exit initial sequence, let session take over
+      // 4. Execute Action Sequence (Only if NOT in session mode)
+      if (!sessionMode) {
+        let initialActionsSucceeded = true;
+        for (const step of actionSequence) {
+          const actionFn = ACTION_REGISTRY[step.action];
+          if (actionFn) {
+            console.log(`\n--- Executing: ${step.action} ---`);
+            try {
+              // Pass isRetry down to actions
+              await actionFn(page, { ...step.params, isRetry });
+            } catch (actionError) {
+              console.error(`Error in action '${step.action}': ${actionError.message}`);
+              
+              // --- SELF-HEALING LOGIC ---
+              console.log('Attempting Visual Error Diagnosis...');
+              const { diagnoseAndSuggest } = await import('./vision_engine.js');
+              const suggestion = await diagnoseAndSuggest(page, `Execute action: ${step.action} with params ${JSON.stringify(step.params)}`, actionError.message);
+              
+              if (suggestion && ACTION_REGISTRY[suggestion.action]) {
+                console.log(`\n>>> SELF-HEALING: Executing alternative action: ${suggestion.action} <<<`);
+                const remedialFn = ACTION_REGISTRY[suggestion.action];
+                await remedialFn(page, { ...suggestion.params, isRetry });
+                console.log('>>> Remedial action completed. Resuming sequence. <<<\n');
+              } else {
+                console.warn('No effective remedial action found. Propagating error.');
+                throw actionError;
+              }
             }
-            
-            // --- SELF-HEALING LOGIC ---
-            console.log('Attempting Visual Error Diagnosis...');
-            const { diagnoseAndSuggest } = await import('./vision_engine.js');
-            const suggestion = await diagnoseAndSuggest(page, `Execute action: ${step.action} with params ${JSON.stringify(step.params)}`, actionError.message);
-            
-            if (suggestion && ACTION_REGISTRY[suggestion.action]) {
-              console.log(`\n>>> SELF-HEALING: Executing alternative action: ${suggestion.action} <<<`);
-              const remedialFn = ACTION_REGISTRY[suggestion.action];
-              await remedialFn(page, { ...suggestion.params, isRetry });
-              console.log('>>> Remedial action completed. Resuming sequence. <<<\n');
-            } else {
-              console.warn('No effective remedial action found. Propagating error.');
-              throw actionError;
-            }
+          } else {
+            console.warn(`Unknown action: ${step.action}`);
           }
-        } else {
-          console.warn(`Unknown action: ${step.action}`);
         }
+        console.log('\nAll actions completed successfully.');
       }
-
-      console.log('\nAll actions completed successfully.');
       
       // 5. Session Mode - Continue generating actions until minimum duration reached
       if (sessionMode) {
@@ -264,10 +259,23 @@ async function main() {
         const userGoal = prompt || "Browse naturally and interestingly";
         
         const session = new SessionManager(minSessionMinutes, userGoal, aiModel);
-        session.start(page.url(), userGoal);
+        
+        // Navigate to a starter page if on about:blank to give the session context
+        if (page.url() === 'about:blank') {
+           console.log('[Session] Starting from blank page. Navigating to Google...');
+           await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded' });
+        }
+
+        session.start(page.url(), userGoal, actionSequence);
         
         while (!session.hasReachedMinimum()) {
           try {
+            // Safety check: is browser still connected?
+            const browserInstance = context.browser();
+            if (browserInstance && !browserInstance.isConnected()) {
+              throw new Error('BROWSER_DISCONNECTED');
+            }
+
             // Update context from current page
             session.updateContext(page.url());
             
@@ -280,44 +288,47 @@ async function main() {
             // DYNAMIC: Scan page content to detect available elements
             const pageContent = await session.scanPageContent(page);
             
-            // Generate next action based on actual page content (await async AI generation)
-            const nextAction = await session.generateNextAction(pageContent);
+            // Generate next action chain based on actual page content (await async AI generation)
+            const actionChain = await session.generateNextAction(page, pageContent);
             
-            if (!nextAction) {
-              console.log('[Session] No more actions. Ending session.');
+            if (!actionChain || !Array.isArray(actionChain) || actionChain.length === 0) {
+              console.log('[Session] No more actions or invalid chain. Ending session.');
               break;
             }
             
-            // Display session status
-            const status = session.getStatus();
-            console.log(`\n[Session] ${status.elapsedMinutes}/${minSessionMinutes} min | Actions: ${status.actionsCompleted} | Page: ${status.pageType}`);
-            console.log(`[Session] Next: ${nextAction.action}`, nextAction.params);
-            
-            // Execute the action
-            const actionFn = ACTION_REGISTRY[nextAction.action];
-            if (actionFn) {
-              try {
-                await actionFn(page, { ...nextAction.params, isRetry });
-                session.recordAction(nextAction.action, nextAction.params);
-              } catch (actionError) {
-                if (actionError.message === 'NO_VIDEO_FOUND') {
-                  console.log('[Session] Fallback: No video found during watch. Switching to browse behavior...');
-                  const browseFn = ACTION_REGISTRY['browse'];
-                  if (browseFn) {
-                    await browseFn(page, { iterations: 10 });
-                    session.recordAction('browse', { iterations: 10, note: 'fallback from watch' });
+            // Execute each action in the chain sequentially
+            for (const nextAction of actionChain) {
+              // Display session status for each step
+              const status = session.getStatus();
+              console.log(`\n[Session] ${status.elapsedMinutes}/${minSessionMinutes} min | Step: ${nextAction.action} (${status.actionsCompleted + 1}) | Page: ${status.pageType}`);
+              
+              // Execute the action
+              const actionFn = ACTION_REGISTRY[nextAction.action];
+              if (actionFn) {
+                try {
+                  await actionFn(page, { ...nextAction.params, isRetry });
+                  session.recordAction(nextAction.action, nextAction.params);
+                } catch (actionError) {
+                  if (actionError.message === 'NO_VIDEO_FOUND') {
+                    console.log('[Session] Fallback: No video found during watch. Switching to browse behavior...');
+                    const browseFn = ACTION_REGISTRY['browse'];
+                    if (browseFn) {
+                      await browseFn(page, { iterations: 10 });
+                      session.recordAction('browse', { iterations: 10, note: 'fallback from watch' });
+                    }
+                  } else {
+                    console.warn(`[Session] Action error: ${actionError.message}. Skipping remaining chain.`);
+                    break; // Stop current chain on error
                   }
-                } else {
-                  throw actionError; // Re-throw other errors
                 }
+              } else {
+                console.warn(`[Session] Unknown action: ${nextAction.action}`);
               }
-            } else {
-              console.warn(`[Session] Unknown action: ${nextAction.action}`);
+              
+              // Brief pause between steps for stability
+              await page.waitForTimeout(2000);
+              session.updateContext(page.url());
             }
-            
-            // Update context after action (URL may have changed)
-            await page.waitForTimeout(1000); // Brief pause for page to stabilize
-            session.updateContext(page.url());
             
           } catch (sessionError) {
             console.error(`[Session] Error during action: ${sessionError.message}`);

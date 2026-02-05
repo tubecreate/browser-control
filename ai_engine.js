@@ -6,7 +6,8 @@ const LOCAL_AI_URL = 'http://localhost:5295/api/v1/localai/chat/completions';
  * AI Engine to map natural language prompts to browser action sequences.
  */
 export class AIEngine {
-  constructor() {
+  constructor(model = 'deepseek-r1:latest') {
+    this.model = model;
     this.actions = [
       { name: 'search', description: 'Search for a keyword on Google', params: ['keyword'] },
       { name: 'browse', description: 'Scroll and move mouse naturally', params: ['iterations'] },
@@ -56,9 +57,9 @@ Example output: {
 }`;
 
     try {
-      console.log('Sending request to Local AI...');
+      console.log(`Sending request to Local AI (Model: ${this.model})...`);
       const response = await axios.post(LOCAL_AI_URL, {
-        model: 'deepseek-r1:latest',
+        model: this.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt }
@@ -221,11 +222,11 @@ Example output: {
         const lookAheadContext = prompt.substring(current.index, Math.min(prompt.length, current.index + 50)).toLowerCase();
 
         if (current.key === 'search') {
-          // Extract keyword, stopping at common separators (require spaces around "and"/"then")
-          let keyword = segmentContext.split(/[,;.]|\s+rồi\s+|\s+xong\s+|\s+sau\s+đó\s+|,\s*and\s+|,\s*then\s+|\s+then\s+|\s+and\s+/i)[0].trim();
+          // Extract keyword, stopping at common separators
+          let keyword = segmentContext.split(/[,;.]|[\s.,]+(then|and|và|rồi|sau đó|xong)\s+/i)[0].trim();
           
-          // Remove leading "for" from "search for X"
-          keyword = keyword.replace(/^for\s+/i, '').trim();
+          // Clean up: remove leading/trailing punctuation and "for"
+          keyword = keyword.replace(/^for\s+/i, '').replace(/[.,;]$/, '').trim();
           
           // Remove quotes
           keyword = keyword.replace(/^['"]|['"]$/g, '');
@@ -257,30 +258,28 @@ Example output: {
                // Extract text target: "click [on] [Target] [delimiter]"
                let rawTarget = segmentContext;
                
-               // Remove leading prepositions "on", "vào", "nút", "button", "the"
-               rawTarget = rawTarget.replace(/^(on|vào|nút|button|the)\s+/i, '').trim();
-               
-               // Stop at delimiters
-               const delimiters = ['and', 'then', 'và', 'sau đó', 'rồi', ','];
-               let cutIndex = rawTarget.length;
-               for (const d of delimiters) {
-                   const idx = rawTarget.toLowerCase().indexOf(` ${d} `); // Space pad to avoid partial word match
-                   if (idx !== -1 && idx < cutIndex) cutIndex = idx;
-               }
-               rawTarget = rawTarget.substring(0, cutIndex).trim();
-               
-               // Remove quotes
-               rawTarget = rawTarget.replace(/^['"]|['"]$/g, '');
-               
-               // PATTERN DETECTION: "first result", "first link", "first answer" -> default click (no text param)
-               const isFirstResultPattern = /^first\s+(result|link|answer|item|option|search\s+result)/i.test(rawTarget);
-               
-               if (isFirstResultPattern) {
-                   // Leave params empty - click.js will default to first search result
-                   console.log('Detected "first result" pattern - using default click behavior');
-               } else if (rawTarget.length > 0 && rawTarget.length < 50) { // Safety limit length
-                   params.text = rawTarget;
-               }
+                // Remove leading prepositions
+                rawTarget = rawTarget.replace(/^(on|vào|nút|button|the|to)\s+/i, '').trim();
+                
+                // Stop at delimiters including punctuation-joined ones like "data, then"
+                const delimitersRegex = /[,;.]|(\s|[,.])+(and|then|và|sau đó|rồi|xong)\s+/i;
+                rawTarget = rawTarget.split(delimitersRegex)[0].trim();
+                
+                // Clean up trailing punctuation
+                rawTarget = rawTarget.replace(/[.,;]$/, '').trim();
+                
+                // Remove quotes
+                rawTarget = rawTarget.replace(/^['"]|['"]$/g, '');
+                
+                // PATTERN DETECTION: "first result", "first link", "first answer" -> default click (no text param)
+                const isFirstResultPattern = /^first\s+(result|link|answer|item|option|search\s+result)/i.test(rawTarget);
+                
+                if (isFirstResultPattern) {
+                    // Leave params empty - click.js will default to first search result
+                    console.log('Detected "first result" pattern - using default click behavior');
+                } else if (rawTarget.length > 0 && rawTarget.length < 50) { // Safety limit length
+                    params.text = rawTarget;
+                }
             }
             actions.push({ action: 'click', params });
           }

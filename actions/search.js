@@ -182,7 +182,11 @@ export async function search(page, params) {
     }
   } catch (e) {}
 
-  const searchBox = page.locator('textarea[name="q"], input[name="q"]');
+  const searchBoxSelection = page.locator('textarea[name="q"], input[name="q"]');
+  const searchBox = (await searchBoxSelection.count()) > 1 
+    ? searchBoxSelection.filter({ visible: true }).first() 
+    : searchBoxSelection.first();
+
   await searchBox.click();
   await searchBox.fill(''); 
   
