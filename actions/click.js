@@ -1,14 +1,42 @@
 import { humanMove } from './mouse_helper.js';
 
 /**
- * Action: Click on a specific element or the first search result.
- * @param {import('playwright').Page} page
- * @param {object} params
+ * Generic Click Action
+ * @param {import('playwright').Page} page 
+ * @param {object} params 
  * @param {string} [params.selector] - CSS selector to click. If not provided, clicks first search result.
+ * @param {string} [params.text] - Text to find and click.
  * @param {string} [params.type] - Type of target (e.g. 'video').
  */
 export async function click(page, params = {}) {
-  const { selector } = params;
+  if (params.type === 'enter') {
+    console.log('[CLICK] Pressing Enter key...');
+    await page.keyboard.press('Enter');
+    return;
+  }
+
+  // Cloudflare / Verification Handling
+  if (params.type === 'verify' || params.text?.toLowerCase().includes('check')) {
+      console.log('[CLICK] Searching for Verification/Cloudflare buttons...');
+      const verifySelectors = [
+          'input[type="checkbox"]', 
+          '#challenge-stage input', 
+          'iframe[src*="cloudflare"]',
+          'text="Verify you are human"',
+          'text="Click to verify"'
+      ];
+      for (const sel of verifySelectors) {
+          const btn = page.locator(sel).first();
+          if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+              console.log(`[CLICK] Found verification element: ${sel}`);
+              await btn.click({ force: true });
+              await page.waitForTimeout(5000); // Wait for challenge to resolve
+              return;
+          }
+      }
+  }
+
+  const { selector, text, type } = params;
   let target;
   
   // Ensure results are loaded if on Google

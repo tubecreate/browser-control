@@ -10,10 +10,16 @@ import * as loginAction from './actions/login.js';
 import * as commentAction from './actions/comment.js';
 import * as visualScanAction from './actions/visual_scan.js';
 import * as watchAction from './actions/watch.js';
+import * as navigateAction from './actions/navigate.js';
+import * as typeAction from './actions/type.js';
+import * as saveImageAction from './actions/save_image.js';
 import { SessionManager } from './session_manager.js';
 
 // Action Registry
 const ACTION_REGISTRY = {
+  navigate: navigateAction.navigate,
+  type: typeAction.type,
+  save_image: saveImageAction.save_image,
   search: searchAction.search,
   browse: browseAction.browse,
   click: clickAction.click,
@@ -38,8 +44,14 @@ async function main() {
   const isManual = args['manual'] || false;
   const sessionMode = args['session'] || false; // Enable generative session mode
   const minSessionMinutes = parseInt(args['session-duration']) || 10;
-  const aiModel = args['ai-model'] || 'qwen:latest'; // NEW: AI model for browser automation
+  const aiModel = args['ai-model'] || 'deepseek-r1:latest'; // NEW: AI model for browser automation
   const cliTags = args['tags']; // Raw CLI arg for overrides
+  const instanceId = args['instance-id'] || null; // Instance ID from BrowserProcessManager
+  
+  // Log instance ID if provided (for multi-instance tracking)
+  if (instanceId) {
+    console.log(`[InstanceID] ${instanceId}`);
+  }
 
   // 1. Determine Action Sequence & Profile Override
   let actionSequence = [];
@@ -126,8 +138,20 @@ async function main() {
 
       if (await fs.pathExists(fingerprintPath)) {
           console.log('Loading saved fingerprint...');
-          fingerprint = await fs.readJson(fingerprintPath);
-      } else {
+          const fingerprintData = await fs.readFile(fingerprintPath, 'utf8');
+          try {
+              fingerprint = JSON.parse(fingerprintData);
+              if (!fingerprint || typeof fingerprint !== 'object' || Object.keys(fingerprint).length < 10) {
+                  throw new Error('Invalid or too small fingerprint object');
+              }
+              console.log(`Fingerprint loaded successfully (Size: ${Math.round(fingerprintData.length/1024)} KB)`);
+          } catch (e) {
+              console.warn('Failed to parse saved fingerprint JSON:', e.message);
+              fingerprint = null; // Force fetch
+          }
+      } 
+      
+      if (!fingerprint) {
           // Determine tags: CLI > Config > Default
           let tags = ['Microsoft Windows', 'Chrome'];
           
@@ -145,7 +169,7 @@ async function main() {
           
           // Save for future use
           await fs.ensureDir(profilePath);
-          await fs.writeJson(fingerprintPath, fingerprint);
+          await fs.outputFile(fingerprintPath, JSON.stringify(fingerprint), 'utf8');
       }
 
       console.log('Applying fingerprint and launching browser...');
@@ -176,9 +200,11 @@ async function main() {
           return process.exit(0);
       }
 
-      // --- MOUSE VISUALIZATION ---
-      await page.addInitScript(() => {
+      // --- MOUSE VISUALIZATION HELPER ---
+      // Use addInitScript to ensure visualization persists across navigations and tabs
+      await context.addInitScript(() => {
         window.addEventListener('DOMContentLoaded', () => {
+          if (document.getElementById('mouse-pointer-visualization')) return;
           const box = document.createElement('div');
           box.id = 'mouse-pointer-visualization';
           box.style.position = 'fixed';
@@ -192,11 +218,18 @@ async function main() {
           box.style.zIndex = '9999999';
           box.style.transition = 'transform 0.1s linear';
           document.body.appendChild(box);
-          
           document.addEventListener('mousemove', (e) => {
             box.style.transform = `translate(${e.clientX - 10}px, ${e.clientY - 10}px)`;
           });
         });
+      });
+
+      // --- TAB MANAGEMENT ---
+      // Listen for new pages (tabs) and switch focus
+      context.on('page', async (newPage) => {
+        console.log('[TabManager] New tab detected! Switching focus...');
+        page = newPage; // Update the main page reference
+        console.log(`[TabManager] Now on: ${page.url()}`);
       });
 
       // 3. Manual Mode Check
@@ -219,13 +252,17 @@ async function main() {
       // 4. Execute Action Sequence (Only if NOT in session mode)
       if (!sessionMode) {
         let initialActionsSucceeded = true;
+        const results = [];
         for (const step of actionSequence) {
           const actionFn = ACTION_REGISTRY[step.action];
           if (actionFn) {
             console.log(`\n--- Executing: ${step.action} ---`);
             try {
               // Pass isRetry down to actions
-              await actionFn(page, { ...step.params, isRetry });
+              const result = await actionFn(page, { ...step.params, isRetry });
+              if (result) {
+                results.push({ action: step.action, result });
+              }
             } catch (actionError) {
               console.error(`Error in action '${step.action}': ${actionError.message}`);
               
@@ -237,7 +274,10 @@ async function main() {
               if (suggestion && ACTION_REGISTRY[suggestion.action]) {
                 console.log(`\n>>> SELF-HEALING: Executing alternative action: ${suggestion.action} <<<`);
                 const remedialFn = ACTION_REGISTRY[suggestion.action];
-                await remedialFn(page, { ...suggestion.params, isRetry });
+                const remedialResult = await remedialFn(page, { ...suggestion.params, isRetry });
+                if (remedialResult) {
+                    results.push({ action: suggestion.action, result: remedialResult, healed: true });
+                }
                 console.log('>>> Remedial action completed. Resuming sequence. <<<\n');
               } else {
                 console.warn('No effective remedial action found. Propagating error.');
@@ -249,6 +289,9 @@ async function main() {
           }
         }
         console.log('\nAll actions completed successfully.');
+        console.log('__RESULTS_START__');
+        console.log(JSON.stringify(results, null, 2));
+        console.log('__RESULTS_END__');
       }
       
       // 5. Session Mode - Continue generating actions until minimum duration reached

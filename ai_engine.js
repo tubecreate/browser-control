@@ -9,6 +9,9 @@ export class AIEngine {
   constructor(model = 'deepseek-r1:latest') {
     this.model = model;
     this.actions = [
+      { name: 'navigate', description: 'Go to a specific URL directly', params: ['url'] },
+      { name: 'type', description: 'Type text into an input or the page', params: ['text', 'selector (optional)'] },
+      { name: 'save_image', description: 'Detect and save the generated image on page', params: [] },
       { name: 'search', description: 'Search for a keyword on Google', params: ['keyword'] },
       { name: 'browse', description: 'Scroll and move mouse naturally', params: ['iterations'] },
       { name: 'click', description: 'Click on a result or selector', params: ['selector (optional)'] },
@@ -28,33 +31,33 @@ export class AIEngine {
     console.log(`AI is thinking about: "${prompt}"...`);
     
     const systemPrompt = `You are a browser automation orchestrator. 
-Your job is to analyze user instructions in ANY LANGUAGE (Vietnamese, English, etc.) and convert them into a sequence of browser actions.
-CRITICAL: The user input may be in Vietnamese, English, or mixed. You must mentally translate the intent into English first then map it to the actions.
+Your job is to convert user instructions into a JSON sequence of browser actions.
 
-Available actions:
+CRITICAL RULES:
+1. COMPLETENESS: DO NOT skip steps. If the user says "type X then save", you MUST include both 'type' and 'save_image'.
+2. SEARCH FLOW: Always 'click' after 'search' to enter the site.
+3. NO Hallucinated Comments: NEVER use 'comment' for instructions like "if Cloudflare appears". Instead, use {"action": "click", "params": {"type": "verify"}}.
+4. SITE BREAKDOWN:
+   - "nhập/prompt/tạo/vẽ/viết [Text]": {"action": "type", "params": {"text": "..."}}
+     * CRITICAL: If the user wants an IMAGE, prepend "Create an image of: " to the text.
+     * CRITICAL: If the user wants a VIDEO, prepend "Create a video of: " to the text.
+   - "lưu ảnh/save image": {"action": "save_image", "params": {}}
+   - "bấm/submit": {"action": "click", "params": {"type": "enter"}}
+5. USE ONLY THESE ACTIONS:
 ${JSON.stringify(this.actions, null, 2)}
+6. PROFILE: Extract 'mở profile "xyz"' into ROOT "profile".
 
-Instructions:
-- Handle complex sequences: search -> browse (long) -> click -> browse (long) -> exit.
-- Detect CORE keywords for search regardless of language (e.g., "tìm kiếm", "find", "search", "google it").
-- Convert time (e.g., "50-100s") to "browse" iterations (10s per iteration).
-- "vào kết quả tốt nhất", "click first result", "bấm vào bài" maps to "click".
-- If the user specifies a profile (e.g., "mở profile 'profile1'", "use profile 'abc'"), extract the profile name.
-- "xem video 50-100s", "watch for 50s" maps to action "watch" with duration.
-- IMPORTANT: "view", "look at", "check out" are synonyms for "watch" when referring to content/video.
-
-Return ONLY a JSON object. 
-Example input (Vietnamese): "mở profile 'profile1' vào google tìm kiếm 'tubecreate' và xem video 30s"
-Example input (English): "open profile 'profile1', search for 'tubecreate' and watch video for 30s"
-
-Example output: {
-  "profile": "profile1",
+Example Output: {
+  "profile": "bbb",
   "actions": [
-    {"action": "search", "params": {"keyword": "tubecreate"}},
-    {"action": "click", "params": {"type": "video"}},
-    {"action": "watch", "params": {"duration": "30s"}}
+    {"action": "navigate", "params": {"url": "https://chatgpt.com"}},
+    {"action": "type", "params": {"text": "Create an image of: con mèo"}},
+    {"action": "click", "params": {"type": "enter"}},
+    {"action": "save_image", "params": {}}
   ]
-}`;
+}
+NOTE: Only add verification steps if explicitly asked or if navigation fails.
+`;
 
     try {
       console.log(`Sending request to Local AI (Model: ${this.model})...`);
@@ -65,7 +68,7 @@ Example output: {
           { role: 'user', content: prompt }
         ],
         stream: false
-      }, { timeout: 120000 }); // 120s for DeepSeek-R1 reasoning
+      }, { timeout: 180000 }); // 180s for DeepSeek-R1 reasoning
 
       let content = response.data.choices[0].message.content;
       console.log('AI Response:', content);
@@ -107,19 +110,24 @@ Example output: {
       let profile = null;
 
       // Extract Profile if mentioned
-      const profileMatch = prompt.match(/mở\s+profile\s+['"]([^'"]+)['"]/i) || prompt.match(/profile\s+(\w+)/i);
+      const profileMatch = prompt.match(/mở\s+profile\s+['"]([^'"]+)['"]/i) || prompt.match(/profile\s+['"]?([^'"]+)['"]?/i);
       if (profileMatch) {
         profile = profileMatch[1];
+        // Remove profile part from prompt to avoid double-matching search/navigate
+        prompt = prompt.replace(profileMatch[0], '');
       }
 
       const actionMarkers = [
-        { key: 'search', patterns: [/tìm\s+kiếm/i, /search/i, /tìm/i, /find/i, /open/i, /mở/i, /go\s+to/i, /truy\s+cập/i] },
-        { key: 'browse', patterns: [/lướt\s+web/i, /lướt/i, /browse/i, /scroll/i, /wait/i, /đợi/i, /chờ/i, /check/i, /kiểm\s+tra/i, /explore/i, /read/i, /đọc/i, /study/i, /nghiên\s+cứu/i, /khám\s+phá/i] },
+        { key: 'navigate', patterns: [/vào\s+(https?:\/\/[^\s]+)/i, /vào\s+grok/i, /vào\s+google/i, /vào\s+youtube/i, /truy\s+cập/i] },
+        { key: 'search', patterns: [/tìm\s+kiếm/i, /search/i, /tìm/i, /find/i] },
+        { key: 'type', patterns: [/nhập/i, /type/i, /gõ/i, /với\s+prompt/i, /prompt\s+['"]?([^'"]+)['"]?/i, /tạo\s+hình/i, /vẽ\s+hình/i, /vẽ/i, /tạo/i, /viết/i] },
+        { key: 'browse', patterns: [/lướt\s+web/i, /lướt/i, /browse/i, /scroll/i, /wait/i, /đợi/i, /chờ/i] },
         { key: 'watch', patterns: [/xem\s+video/i, /watch/i, /xem/i, /view/i] },
-        { key: 'click', patterns: [/bấm\s+vào/i, /click\s+vào/i, /vào\s+kết\s+quả/i, /vào\s+bài/i, /vào/i, /click/i, /bấm/i, /tap/i] },
+        { key: 'click', patterns: [/bấm\s+vào/i, /click\s+vào/i, /click/i, /bấm/i, /tap/i, /cloudflare/i, /check/i, /verify/i] },
         { key: 'login', patterns: [/login/i, /đăng\s+nhập/i] },
-        { key: 'comment', patterns: [/comment/i, /bình\s+luận/i, /nhận\s+xét/i, /reply/i] },
-        { key: 'visual_scan', patterns: [/visual\s+scan/i, /scan\s+màn\s+hình/i, /phân\s+tích\s+hình/i, /analyze\s+screen/i] }
+        { key: 'comment', patterns: [/comment/i, /bình\s+luận/i] },
+        { key: 'save_image', patterns: [/lưu\s+ảnh/i, /save\s+image/i, /tải\s+ảnh/i, /download\s+image/i] },
+        { key: 'visual_scan', patterns: [/visual\s+scan/i, /scan\s+màn\s+hình/i] }
       ];
 
       // Remove overlapping matches (keep longest/first)
@@ -221,7 +229,31 @@ Example output: {
         // Look ahead context includes the next 30 chars regardless of markers
         const lookAheadContext = prompt.substring(current.index, Math.min(prompt.length, current.index + 50)).toLowerCase();
 
-        if (current.key === 'search') {
+        if (current.key === 'navigate') {
+          // Extract site name or URL
+          let target = segmentContext.split(/[,;.]|[\s.,]+(then|and|và|rồi|sau đó|xong)\s+/i)[0].trim();
+          target = target.replace(/^to\s+/i, '').replace(/[.,;]$/, '').trim();
+          
+          if (target.toLowerCase().includes('grok')) target = 'grok.com';
+          else if (target.toLowerCase().includes('google')) target = 'google.com';
+          else if (target.toLowerCase().includes('youtube')) target = 'youtube.com';
+
+          actions.push({ action: 'navigate', params: { url: target } });
+        } else if (current.key === 'type') {
+          // Extract text to type
+          let text = segmentContext.split(/[,;.]|[\s.,]+(then|and|và|rồi|sau đó|xong)\s+/i)[0].trim();
+          text = text.replace(/^(với\s+)?prompt\s+/i, '').replace(/[.,;]$/, '').trim();
+          text = text.replace(/^['"]|['"]$/g, '');
+          
+          // Prepend intent prefix if creating asset
+          if (lookAheadContext.includes('ảnh') || lookAheadContext.includes('hình') || lookAheadContext.includes('image')) {
+              text = `Create an image of: ${text}`;
+          } else if (lookAheadContext.includes('video') || lookAheadContext.includes('phim')) {
+              text = `Create a video of: ${text}`;
+          }
+
+          actions.push({ action: 'type', params: { text: text || 'hello' } });
+        } else if (current.key === 'search') {
           // Extract keyword, stopping at common separators
           let keyword = segmentContext.split(/[,;.]|[\s.,]+(then|and|và|rồi|sau đó|xong)\s+/i)[0].trim();
           
@@ -339,6 +371,8 @@ Example output: {
           }
 
           actions.push({ action: 'comment', params: instructionParams });
+        } else if (current.key === 'save_image') {
+          actions.push({ action: 'save_image', params: {} });
         } else if (current.key === 'visual_scan') {
           actions.push({ action: 'visual_scan', params: {} });
         }
