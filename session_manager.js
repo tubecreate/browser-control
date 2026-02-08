@@ -7,7 +7,7 @@ import { getGpuUsage } from './gpu_monitor.js';
  */
 
 export class SessionManager {
-  constructor(minDurationMinutes = 10, userGoal = null, aiModel = 'qwen:latest') {
+  constructor(minDurationMinutes = 10, userGoal = null, aiModel = 'qwen:latest', agentContext = null) {
     this.minDurationMs = minDurationMinutes * 60 * 1000;
     this.sessionId = null;
     this.startTime = null;
@@ -18,11 +18,12 @@ export class SessionManager {
       domain: null
     };
     this.userGoal = userGoal;
-    this.aiModel = aiModel; // NEW: Configurable AI model
+    this.aiModel = aiModel;
+    this.agentContext = agentContext; // NEW: Store agent context (interests, routine)
     this.aiUrl = 'http://localhost:5295/api/v1/localai/chat/completions';
-    this.lastRefuelTime = 0; // NEW: Track last ChatGPT refuel
-    this.REFUEL_COOLDOWN_MS = 120000; // 2 minutes cooldown
-    this.taskQueue = []; // NEW: Queue for planned actions
+    this.lastRefuelTime = 0;
+    this.REFUEL_COOLDOWN_MS = 120000;
+    this.taskQueue = [];
   }
 
   /**
@@ -614,6 +615,37 @@ Output ONLY the JSON array, no explanations:`;
       if (currentUrl.includes('/watch')) {
         // Already on video page, just watch
         return [{ action: 'watch', params: { duration: '60s' } }];
+      }
+      
+      // SEARCH LOGIC: If on Home/Search results (and random < 0.4), trigger a new search based on CONTEXT
+      if (this.agentContext && rand < 0.4) {
+        let searchTerm = null;
+        
+        // 1. Check Routine Tasks for current period
+        const routineTasks = this.agentContext.routine_tasks || {};
+        const activeTasks = Object.keys(routineTasks).filter(k => routineTasks[k]);
+        
+        // 2. Check Interests
+        const interests = this.agentContext.interests || [];
+        
+        const topics = [...activeTasks, ...interests];
+        
+        if (topics.length > 0) {
+            const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+            // Format topic for search (replace underscores)
+            const topicClean = randomTopic.replace(/_/g, ' ');
+            
+            const suffixes = ['tutorial', 'explained', 'review', 'news', 'documentary', 'live'];
+            const randomSuffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+            
+            searchTerm = `${topicClean} ${randomSuffix}`;
+            console.log(`[SessionManager] 🎯 Context-Aware Search triggered: "${searchTerm}" (Source: ${randomTopic})`);
+            
+            return [
+                { action: 'search', params: { keyword: searchTerm } },
+                { action: 'browse', params: { iterations: 2 } } // Short browse after search
+            ];
+        }
       }
       
       // On YouTube home/search, prioritize clicking videos

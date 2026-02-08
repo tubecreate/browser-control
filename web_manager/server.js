@@ -111,7 +111,7 @@ app.post('/api/browser-status', (req, res) => {
 });
 
 // API: Launch Profile
-app.post('/api/launch', (req, res) => {
+app.post('/api/launch', async (req, res) => {
     console.log('>>> Received /api/launch request:', req.body);
     const { profile, url, prompt, headless, sessionMode } = req.body;
     if (!profile) return res.status(400).json({ error: 'Profile required' });
@@ -138,6 +138,20 @@ app.post('/api/launch', (req, res) => {
     // Add headless flag if requested
     if (headless) {
         args.push('--headless');
+    }
+
+    // Handle Context Object (Write to temp file)
+    if (req.body.context) {
+        try {
+            const contextDir = path.join(PROJECT_ROOT, 'data', 'contexts');
+            await fs.ensureDir(contextDir);
+            const contextFile = path.join(contextDir, `${req.body.context.agent_name || 'agent'}_${Date.now()}.json`);
+            await fs.writeJson(contextFile, req.body.context, { spaces: 2 });
+            console.log(`[Launch] Context saved to: ${contextFile}`);
+            args.push('--context-file', contextFile);
+        } catch (e) {
+            console.error('[Launch] Failed to save context file:', e.message);
+        }
     }
 
     // Add model flag if provided

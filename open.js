@@ -358,7 +358,20 @@ async function main() {
         // Use the original prompt as the User Goal
         const userGoal = prompt || "Browse naturally and interestingly";
         
-        const session = new SessionManager(minSessionMinutes, userGoal, aiModel);
+        // Load Agent Context from file if provided
+        let agentContext = null;
+        if (args['context-file']) {
+            try {
+                if (await fs.pathExists(args['context-file'])) {
+                    agentContext = await fs.readJson(args['context-file']);
+                    console.log(`[Session] Loaded agent context for: ${agentContext.agent_name}`);
+                }
+            } catch (e) {
+                console.error('[Session] Failed to load context file:', e.message);
+            }
+        }
+
+        const session = new SessionManager(minSessionMinutes, userGoal, aiModel, agentContext);
         
         console.log(`\n>>> STARTING SESSION MODE (${minSessionMinutes} min) with Model: ${aiModel} <<<`);
         console.log(`Goal: "${userGoal}"`);
