@@ -421,20 +421,37 @@ export class SessionManager {
         model: this.aiModel, // Use configured AI model
         messages: [{ role: "user", content: prompt }],
         stream: false,
-        temperature: 0.7
+        temperature: 0.7,
+        format: "json" // Request JSON format explicitly
       }, { timeout: 60000 }); // 60s timeout (qwen is fast)
 
       // Parse JSON from response
       let content = response.data?.choices?.[0]?.message?.content;
       if (!content) return null;
 
-      // Extract JSON block (array or object)
-      const jsonMatch = content.match(/\[[\s\S]*\]/) || content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return Array.isArray(parsed) ? parsed : [parsed];
+      // Extract JSON block (array or object) with better regex
+      let jsonMatch = content.match(/\[[\s\S]*\]/) || content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.warn('[SessionManager] No JSON found in AI response:', content);
+        return null;
       }
-      return null;
+
+      let jsonStr = jsonMatch[0];
+      
+      // Clean common AI formatting errors
+      jsonStr = jsonStr
+        .replace(/,(\s*[\]}])/g, '$1')  // Remove trailing commas
+        .replace(/\/\/.*/g, '')          // Remove // comments
+        .replace(/\/\*[\s\S]*?\*\//g, ''); // Remove /* */ comments
+      
+      try {
+        const parsed = JSON.parse(jsonStr);
+        return Array.isArray(parsed) ? parsed : [parsed];
+      } catch (parseError) {
+        console.error('[SessionManager] JSON Parse Error:', parseError.message);
+        console.error('[SessionManager] Attempted to parse:', jsonStr.substring(0, 200));
+        return null;
+      }
     } catch (error) {
       console.warn('[SessionManager] AI Request Error:', error.message);
       return null;
@@ -562,15 +579,22 @@ INSTRUCTIONS:
 3. IF a popup or cookie banner is visible (see SUSPECTED POPUPS above), PRIORITIZE clicking the dismissal button to close it.
 4. IF clicking: YOU MUST use the EXACT "text" from the lists above.
 5. For News/Articles: Chain multiple 'browse' and 'click' actions on related content.
-6. For YouTube: Chain search, click, and multiple 'watch' and 'browse' steps.
+6. For YouTube: Chain 'click' on videos and 'watch' actions.
 
 Available actions:
-- search { "keyword": "..." }
+- search { "keyword": "search term" }
 - click { "text": "EXACT TEXT FROM LIST" }
-- browse { "iterations": 5-10 }
+- browse { "iterations": 5 }
 - watch { "duration": "60s" }
 
-Output JSON ONLY (an array of actions): [ { "action": "...", "params": { ... } }, ... ]`;
+CRITICAL: Output MUST be valid JSON array. Example:
+[
+  { "action": "click", "params": { "text": "GitHub - How AI Development Has Changed" } },
+  { "action": "browse", "params": { "iterations": 8 } },
+  { "action": "search", "params": { "keyword": "latest technology" } }
+]
+
+Output ONLY the JSON array, no explanations:`;
   }
 
   /**
@@ -583,6 +607,30 @@ Output JSON ONLY (an array of actions): [ { "action": "...", "params": { ... } }
     }
     
     const rand = Math.random();
+    const currentUrl = this.currentContext.url || '';
+    
+    // PRIORITY 0: YouTube - Focus on watching videos
+    if (currentUrl.includes('youtube.com')) {
+      if (currentUrl.includes('/watch')) {
+        // Already on video page, just watch
+        return [{ action: 'watch', params: { duration: '60s' } }];
+      }
+      
+      // On YouTube home/search, prioritize clicking videos
+      const videoLinks = (pageContent.interactiveElements || []).filter(el =>
+        el.href?.includes('youtube.com/watch') || el.href?.includes('/watch?v=')
+      );
+      
+      if (videoLinks.length > 0 && rand < 0.8) {
+        const randomVideo = videoLinks[Math.floor(Math.random() * videoLinks.length)];
+        return [
+          { action: 'click', params: { text: randomVideo.text } },
+          { action: 'watch', params: { duration: '60s' } }
+        ];
+      }
+      
+      return [{ action: 'browse', params: { iterations: 5 } }];
+    }
     
     // Priority 1: Videos (if present)
     if (pageContent.hasVideo && pageContent.videoCount > 0) {
