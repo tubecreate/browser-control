@@ -115,34 +115,50 @@ export async function watch(page, params = {}) {
 }
 
 async function handleAds(page) {
-    try {
-        // Common YouTube ad selectors
-        const skipBtnSelectors = [
-            '.ytp-ad-skip-button',
-            '.ytp-ad-skip-button-modern',
-            '.videoAdUiSkipButton',
-            '.ytp-ad-overlay-close-button'
-        ];
+    // Common YouTube ad selectors - Updated based on recent UI changes
+    const skipBtnSelectors = [
+        '.ytp-ad-skip-button',
+        '.ytp-ad-skip-button-modern',
+        '.videoAdUiSkipButton',
+        '.ytp-ad-overlay-close-button',
+        '.ytp-skip-ad-button', // New one often seen
+        'button[id^="skip-button"]', 
+        'div.ad-interrupting .ytp-ad-skip-button-slot' 
+    ];
 
-        for (const selector of skipBtnSelectors) {
+    for (const selector of skipBtnSelectors) {
+        try {
             const btn = page.locator(selector).first();
-            if (await btn.isVisible()) {
-                console.log('Ad detected! Clicking skip button...');
-                await btn.click();
+            if (await btn.isVisible({ timeout: 100 })) { // Short timeout check
+                console.log(`Ad detected (${selector})! Clicking skip button...`);
+                await btn.click({ force: true }); // Force click to bypass overlays
                 await page.waitForTimeout(500);
-                return; // Skipped one, wait for loop
+                return; 
             }
+        } catch (e) {
+            // Ignore visibility check errors
         }
-    } catch (e) {
-        // Ignore errors during ad check (element might disappear)
     }
+    
+    // Also check for "Skip Ads" text content as a fallback
+    try {
+        const skipTextBtn = page.getByText('Skip Ads', { exact: false }).first();
+        if (await skipTextBtn.isVisible({ timeout: 100 })) {
+             console.log('Ad detected (Text Match)! Clicking skip button...');
+             await skipTextBtn.click({ force: true });
+        }
+    } catch (e) {}
 }
 
 async function randomMouseMove(page) {
     const vp = page.viewportSize();
     if (!vp) return;
     
-    const x = Math.floor(Math.random() * vp.width);
-    const y = Math.floor(Math.random() * vp.height);
-    await humanMove(page, x, y);
+    const x = Math.floor(Math.random() * (vp.width - 100)) + 50;
+    const y = Math.floor(Math.random() * (vp.height - 100)) + 50;
+    
+    // Use try-catch for mouse moves as they can fail if page context is lost
+    try {
+        await page.mouse.move(x, y, { steps: 5 });
+    } catch (e) {}
 }

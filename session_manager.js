@@ -24,6 +24,8 @@ export class SessionManager {
     this.lastRefuelTime = 0;
     this.REFUEL_COOLDOWN_MS = 120000;
     this.taskQueue = [];
+    this.gpuUsageHistory = []; // Track last 1 minute of GPU usage
+    this.MAX_GPU_HISTORY = 12; // 12 samples @ 5s interval = 1 minute
   }
 
   /**
@@ -44,8 +46,24 @@ export class SessionManager {
       this.updateContext(initialUrl);
     }
     
+    // Start GPU monitoring (sample every 5 seconds)
+    if (this.gpuMonitorInterval) clearInterval(this.gpuMonitorInterval);
+    this.gpuMonitorInterval = setInterval(async () => {
+        const usage = await getGpuUsage();
+        this.gpuUsageHistory.push(usage);
+        if (this.gpuUsageHistory.length > this.MAX_GPU_HISTORY) {
+            this.gpuUsageHistory.shift();
+        }
+    }, 5000);
+
     console.log(`[SessionManager] Started session ${this.sessionId} (Goal: "${this.userGoal || 'Browse naturally'}")`);
     return this.sessionId;
+  }
+
+  getAverageGpuUsage() {
+      if (this.gpuUsageHistory.length === 0) return 0;
+      const sum = this.gpuUsageHistory.reduce((a, b) => a + b, 0);
+      return Math.round(sum / this.gpuUsageHistory.length);
   }
 
   /**
@@ -327,20 +345,20 @@ export class SessionManager {
     // AI-Driven Generation (if goal is set)
     if (this.userGoal) {
       try {
-        // AI Refueling Logic: Check GPU usage and COOLDOWN
-        const gpuUsage = await getGpuUsage();
-        console.log(`[SessionManager] Current GPU Usage: ${gpuUsage}%`);
+        // AI Refueling Logic: Check GPU usage (AVERAGE over last minute) and COOLDOWN
+        const gpuUsage = this.getAverageGpuUsage();
+        console.log(`[SessionManager] Average GPU Usage (1 min): ${gpuUsage}%`);
         
         let aiAction = null;
         const now = Date.now();
         const timeSinceLastRefuel = now - this.lastRefuelTime;
 
         if (gpuUsage > 90 && timeSinceLastRefuel > this.REFUEL_COOLDOWN_MS) {
-          console.log('[SessionManager] 🚀 GPU is HIGH. Cooldown passed. Switching to AI Refueling (ChatGPT Web)...');
+          console.log('[SessionManager] 🚀 AVG GPU is HIGH (>90%). Cooldown passed. Switching to AI Refueling (ChatGPT Web)...');
           aiAction = await this.generateAIActionViaChatGPTWeb(page, pageContent, remainingMinutes);
         } else {
           if (gpuUsage > 90) {
-            console.log(`[SessionManager] GPU is high but cooling down (${Math.ceil((this.REFUEL_COOLDOWN_MS - timeSinceLastRefuel)/1000)}s left). Using Local AI.`);
+            console.log(`[SessionManager] AVG GPU is high but cooling down (${Math.ceil((this.REFUEL_COOLDOWN_MS - timeSinceLastRefuel)/1000)}s left). Using Local AI.`);
           }
           aiAction = await this.generateAIAction(pageContent, remainingMinutes);
         }
@@ -493,9 +511,29 @@ export class SessionManager {
       
       await chatTab.goto('https://chatgpt.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
       
-      // Wait for prompt input
+      // Safety Check: Verify Login
       const inputSelector = '#prompt-textarea';
-      await chatTab.waitForSelector(inputSelector, { timeout: 10000 });
+      try {
+          await chatTab.waitForSelector(inputSelector, { timeout: 8000 });
+      } catch (e) {
+          console.warn('[SessionManager] ChatGPT Prompt Input NOT found. Possible LOGIN required.');
+          
+          // Check for login buttons/text
+          const headers = await chatTab.$$('h1, h2, div[role="heading"]');
+          for (const h of headers) {
+              const text = await h.innerText();
+              if (text.toLowerCase().includes('welcome back') || text.toLowerCase().includes('login') || text.toLowerCase().includes('sign up')) {
+                  console.error('[SessionManager] 🛑 ChatGPT IS NOT LOGGED IN. Aborting AI Refueling to prevent hang.');
+                  await chatTab.close();
+                  return null;
+              }
+          }
+          
+          // If unsure, still abort to be safe
+          console.warn('[SessionManager] Could not confirm ChatGPT ready state. Aborting.');
+          await chatTab.close();
+          return null;
+      }
       
       // Type and send
       await chatTab.fill(inputSelector, prompt);
