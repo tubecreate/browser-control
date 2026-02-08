@@ -36,7 +36,7 @@ Your job is to convert user instructions into a JSON sequence of browser actions
 CRITICAL RULES:
 1. COMPLETENESS: DO NOT skip steps. If the user says "type X then save", you MUST include both 'type' and 'save_image'.
 2. SEARCH FLOW: Always 'click' after 'search' to enter the site.
-3. NO Hallucinated Comments: NEVER use 'comment' for instructions like "if Cloudflare appears". Instead, use {"action": "click", "params": {"type": "verify"}}.
+3. NO Hallucinated Comments: NEVER use 'comment' for instructions like "if Cloudflare appears". Do NOT add "verify" steps unless explicitly requested.
 4. SITE BREAKDOWN:
    - "nhập/prompt/tạo/vẽ/viết [Text]": {"action": "type", "params": {"text": "..."}}
      * CRITICAL: If the user wants an IMAGE, prepend "Create an image of: " to the text.

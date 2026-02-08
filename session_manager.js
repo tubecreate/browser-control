@@ -155,13 +155,23 @@ export class SessionManager {
           bodyText.includes("500 Internal Server Error") ||
           bodyText.includes("404 Not Found");
           
-        // Captcha Detection
+        // Captcha Detection - DISABLED by user request
+        const hasCaptcha = false;
+        /* 
+        const isFinancialSite = window.location.hostname.includes('bloomberg') || 
+                               window.location.hostname.includes('forbes') || 
+                               window.location.hostname.includes('yahoo');
+                               
         const hasCaptcha = 
-          document.querySelectorAll('iframe[src*="recaptcha"]').length > 0 ||
+          !isFinancialSite && // Skip aggressive checks on known financial news sites
+          (document.querySelectorAll('iframe[src*="recaptcha"]').length > 0 ||
           document.querySelectorAll('iframe[src*="cloudflare"]').length > 0 ||
-          document.querySelector('#captcha') !== null ||
-          bodyText.includes("Verify you are human") ||
-          bodyText.includes("security check");
+          document.querySelector('#captcha') !== null) && 
+          // Only if it really looks like a blocking captcha page
+          (bodyText.length < 2000 || 
+           (bodyText.includes("Verify you are human") && !bodyText.includes("human resources")) || 
+           (bodyText.includes("security check") && !bodyText.includes("security check-in")));
+        */
         
         // Popup / Blocking Element Detection
         const potentialPopups = [];
@@ -237,12 +247,12 @@ export class SessionManager {
         };
       });
       
-      if (content.isErrorPage || content.hasCaptcha) {
+      if (content.isErrorPage || (content.hasCaptcha && !content.potentialPopups.length)) { // Only warn if captcha AND no popups to dismiss
         console.warn(`[SessionManager] DETECTED ISSUE: Error=${content.isErrorPage}, Captcha=${content.hasCaptcha}`);
       } else if (content.potentialPopups.length > 0) {
         console.log(`[SessionManager] POTENTIAL POPUPS DETECTED:`, content.potentialPopups.map(p => p.text));
       } else {
-        console.log(`[SessionManager] Scan results:`, content);
+        console.log(`[SessionManager] Scan results: LinkCount=${content.linkCount}, HasArticles=${content.hasArticles}`);
       }
       return content;
     } catch (e) {
@@ -456,6 +466,13 @@ export class SessionManager {
     let chatTab = null;
     try {
       chatTab = await page.context().newPage();
+      
+      // Safety check: Ensure we didn't get the same page
+      if (chatTab === page) {
+         console.warn('[SessionManager] New tab is same as main page! Aborting refueling.');
+         return null;
+      }
+      
       await chatTab.goto('https://chatgpt.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
       
       // Wait for prompt input
@@ -472,33 +489,45 @@ export class SessionManager {
       let attempts = 0;
       while (attempts < 45) {
         await chatTab.waitForTimeout(2000);
-        const content = await chatTab.content();
+        // Check if chatTab is still open
+        if (chatTab.isClosed()) break;
         
-        // Improved Regex: Handle markdown code blocks and find the first array [ ]
-        const jsonBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || content.match(/(\[[\s\S]*?\])/);
-        
-        if (jsonBlockMatch) {
-          try {
-            const rawJson = jsonBlockMatch[1] || jsonBlockMatch[0];
-            const parsed = JSON.parse(rawJson.trim());
-            aiResponse = Array.isArray(parsed) ? parsed : [parsed];
+        try {
+            const content = await chatTab.content();
             
-            if (aiResponse.length >= 2) { // Ensure we got at least a partial chain
-              console.log(`[SessionManager] AI Refueling SUCCESS! Obtained ${aiResponse.length} steps.`);
-              break;
+            // Improved Regex: Handle markdown code blocks and find the first array [ ]
+            const jsonBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || content.match(/(\[[\s\S]*?\])/);
+            
+            if (jsonBlockMatch) {
+              const rawJson = jsonBlockMatch[1] || jsonBlockMatch[0];
+              const parsed = JSON.parse(rawJson.trim());
+              aiResponse = Array.isArray(parsed) ? parsed : [parsed];
+              
+              if (aiResponse.length >= 2) { // Ensure we got at least a partial chain
+                console.log(`[SessionManager] AI Refueling SUCCESS! Obtained ${aiResponse.length} steps.`);
+                break;
+              }
             }
-          } catch (e) {
-             // Partial or invalid JSON, keep waiting for completion
-          }
+        } catch (e) {
+             // Content read error, maybe reloading or busy
         }
         attempts++;
       }
       
       if (aiResponse) {
-        console.log('[SessionManager] Closing ChatGPT tab BEFORE execution...');
+        console.log('[SessionManager] Switching back to main page...');
         this.lastRefuelTime = Date.now(); // Record success time
+        
+        // Bring main page to front first to avoid context closure issues
+        try { await page.bringToFront(); } catch(e) {}
+        try { await page.waitForTimeout(1000); } catch(e) {}
+        
+        console.log('[SessionManager] Closing ChatGPT tab...');
         await chatTab.close();
-        chatTab = null; // Prevent double close in finally
+        chatTab = null; 
+        
+        // Double check main page is alive
+        if (page.isClosed()) throw new Error('Main page closed during refueling');
       }
 
       return aiResponse;
@@ -506,9 +535,8 @@ export class SessionManager {
       console.error('[SessionManager] AI Refueling FAILED:', e.message);
       return null;
     } finally {
-      if (chatTab) {
-        console.log('[SessionManager] Cleaning up ChatGPT tab...');
-        await chatTab.close();
+      if (chatTab && !chatTab.isClosed()) {
+        try { await chatTab.close(); } catch(e) {}
       }
     }
   }

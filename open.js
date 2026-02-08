@@ -42,6 +42,7 @@ async function main() {
   const isNewProfile = args['new-profile'] || false;
   const exportCookies = args['export-cookies'] || false;
   const isManual = args['manual'] || false;
+  const isHeadless = args['headless'] || false; // Run browser in headless mode
   const sessionMode = args['session'] || false; // Enable generative session mode
   const minSessionMinutes = parseInt(args['session-duration']) || 10;
   const aiModel = args['ai-model'] || 'deepseek-r1:latest'; // NEW: AI model for browser automation
@@ -59,20 +60,68 @@ async function main() {
   
   if (!exportCookies && !isManual) { // Skip planning if exporting cookies or manual mode
       if (prompt) { 
-        // Always plan initially to satisfy user's specific prompt/schedule
-        const ai = new AIEngine(aiModel);
-        const result = await ai.planActions(prompt);
-        actionSequence = result.actions;
-        
-        console.log('\n--- 🤖 AI PLANNED ACTIONS ---');
-        actionSequence.forEach((step, idx) => {
-             console.log(`${idx + 1}. [${step.action.toUpperCase()}] ${JSON.stringify(step.params)}`);
-        });
-        console.log('-----------------------------\n');
-
-        if (result.profile) {
-          console.log(`\n>>> Profile switch requested via prompt: ${result.profile}`);
-          profileName = result.profile;
+        // OPTIMIZATION: If prompt looks like a structured command (contains 'then'), skip AI planning
+        if (prompt.includes(', then ') || prompt.includes(', and then ')) {
+            console.log('>>> Detected structured prompt. Skipping AI planning for speed.');
+            // Simple heuristic parsing
+            actionSequence = prompt.split(/, then |, and then /).map(step => {
+                const s = step.trim().toLowerCase();
+                let action = 'browse';
+                let params = {};
+                
+                if (s.startsWith('search for ')) {
+                    action = 'search';
+                    params = { keyword: s.replace('search for ', '').replace(/'/g, '') };
+                } else if (s.includes('click')) {
+                    action = 'click';
+                    // Support variations: 'click first result', 'click result', 'click [text]'
+                    if (s.includes('first result')) {
+                        params = { element: 'first result' };
+                    } else if (s.includes('result')) {
+                        params = { element: 'result' };
+                    } else {
+                        params = { element: s.replace('click ', '') };
+                    }
+                } else if (s.startsWith('read')) {
+                    action = 'browse'; // Map 'read' to 'browse'
+                    const match = s.match(/(\d+) seconds/);
+                    params = { duration: match ? parseInt(match[1]) : 60 };
+                } else if (s.startsWith('watch')) {
+                    action = 'watch';
+                    const match = s.match(/(\d+) seconds/);
+                    params = { duration: match ? parseInt(match[1]) : 60 };
+                } else if (s.includes('browse')) {
+                    action = 'browse';
+                    const match = s.match(/(\d+) seconds/);
+                    params = { duration: match ? parseInt(match[1]) : 60 };
+                }
+                
+                return { action, params };
+            });
+            
+            // Default profile if not specified
+            if (!profileName || profileName === 'default') {
+                // If we skipped AI, we don't get a profile suggestion, so keep current
+            }
+        } else {
+            // Complex/Unstructured prompt -> Use AI
+            console.log('>>> Analyzing prompt with AI...');
+            const ai = new AIEngine(aiModel);
+            const result = await ai.planActions(prompt);
+            actionSequence = result.actions;
+            
+            console.log('\n--- 🤖 AI PLANNED ACTIONS ---');
+            actionSequence.forEach((step, idx) => {
+                 console.log(`${idx + 1}. [${step.action.toUpperCase()}] ${JSON.stringify(step.params)}`);
+            });
+            console.log('-----------------------------\n');
+    
+            if (result.profile && !args.profile) {
+              console.log(`\n>>> Profile switch requested via prompt: ${result.profile}`);
+              profileName = result.profile;
+            } else if (result.profile && args.profile) {
+              console.log(`\n>>> AI suggested profile '${result.profile}' but keeping CLI override '${args.profile}'`);
+            }
         }
       } else if (actionsArg) {
         actionSequence = actionsArg.split(',').map(name => ({
@@ -184,7 +233,10 @@ async function main() {
 
       context = await plugin.launchPersistentContext(profilePath, {
         headless: !!exportCookies, // Headless if just exporting
-        args: ['--start-maximized'],
+        args: [
+            '--start-maximized',
+            '--remote-debugging-port=0' // Force random port for parallelism
+        ],
       });
 
       // Ensure a page exists immediately
@@ -296,12 +348,20 @@ async function main() {
       
       // 5. Session Mode - Continue generating actions until minimum duration reached
       if (sessionMode) {
+        // 5. Start Session Mode (if enabled)
+        // Parse model from args, default to qwen:latest if not set
+        const aiModel = args.model || 'qwen:latest';
+        const minSessionMinutes = parseInt(args['session-duration']) || 10;
+        
         console.log(`\n=== SESSION MODE ENABLED (${minSessionMinutes} min minimum) ===\n`);
         
         // Use the original prompt as the User Goal
         const userGoal = prompt || "Browse naturally and interestingly";
         
         const session = new SessionManager(minSessionMinutes, userGoal, aiModel);
+        
+        console.log(`\n>>> STARTING SESSION MODE (${minSessionMinutes} min) with Model: ${aiModel} <<<`);
+        console.log(`Goal: "${userGoal}"`);
         
         // Navigate to a starter page if on about:blank to give the session context
         if (page.url() === 'about:blank') {
@@ -311,6 +371,40 @@ async function main() {
 
         session.start(page.url(), userGoal, actionSequence);
         
+        // Status reporting loop (every 5 seconds) - lightweight, no screenshots
+        const statusInterval = setInterval(async () => {
+          try {
+            if (!page || page.isClosed()) {
+              clearInterval(statusInterval);
+              return;
+            }
+            
+            const currentUrl = page.url();
+            const status = session.getStatus();
+            
+            // Send status update to server for dashboard
+            try {
+              const fetch = (await import('node-fetch')).default;
+              await fetch('http://localhost:3000/api/browser-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  instanceId,
+                  profile: profileName,
+                  url: currentUrl,
+                  status: session.currentContext?.pageType || 'browsing',
+                  actionCount: status.actionsCompleted,
+                  lastAction: `${status.elapsedMinutes}/${minSessionMinutes} min`
+                })
+              });
+            } catch (e) {
+              // Server not available, skip
+            }
+          } catch (e) {
+            // Status update failed
+          }
+        }, 5000);
+        
         while (!session.hasReachedMinimum()) {
           try {
             // Safety check: is browser still connected?
@@ -319,8 +413,29 @@ async function main() {
               throw new Error('BROWSER_DISCONNECTED');
             }
 
+            // Page Recovery: If page was closed (e.g. by ChatGPT glitch), recover
+            if (!page || page.isClosed()) {
+                const allPages = context.pages();
+                if (allPages.length > 0) {
+                    // Switch to the last available page (likely the original one)
+                    page = allPages[allPages.length - 1];
+                    console.log(`[TabManager] Recovered focus to existing tab: ${page.url()}`);
+                    try { await page.bringToFront(); } catch(e) {}
+                } else {
+                    // No pages left, create new one
+                    console.warn('[Session] All pages closed. Recreating main page...');
+                    page = await context.newPage();
+                    await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded' });
+                }
+            }
+
             // Update context from current page
-            session.updateContext(page.url());
+            try {
+                session.updateContext(page.url());
+            } catch (e) {
+                // If accessing url fails, we might need one more check
+                if (!page || page.isClosed()) continue; 
+            }
             
             // Check if stuck on same URL
             if (session.isStuckOnSameUrl()) {
@@ -346,7 +461,14 @@ async function main() {
               console.log(`\n[Session] ${status.elapsedMinutes}/${minSessionMinutes} min | Step: ${nextAction.action} (${status.actionsCompleted + 1}) | Page: ${status.pageType}`);
               
               // Execute the action
-              const actionFn = ACTION_REGISTRY[nextAction.action];
+              let actionFn = ACTION_REGISTRY[nextAction.action];
+              
+              // Map 'read' to 'browse' if not explicitly defined
+              if (!actionFn && nextAction.action === 'read') {
+                  console.log('[Session] Mapping "read" action to "browse" implementation');
+                  actionFn = ACTION_REGISTRY['browse'];
+              }
+
               if (actionFn) {
                 try {
                   await actionFn(page, { ...nextAction.params, isRetry });
@@ -425,6 +547,7 @@ async function main() {
           }
         }
         
+        clearInterval(statusInterval);
         const finalStatus = session.end();
         console.log('\n=== SESSION COMPLETED ===');
         console.log(`Duration: ${finalStatus.elapsedMinutes} minutes`);

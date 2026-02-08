@@ -15,7 +15,7 @@ const PORT = 3000;
 // Path Config
 const PROJECT_ROOT = path.join(__dirname, '..');
 const PROFILES_DIR = path.join(PROJECT_ROOT, 'profiles');
-const OPEN_SCRIPT = path.join(PROJECT_ROOT, 'open_fix.js');
+const OPEN_SCRIPT = path.join(PROJECT_ROOT, 'open.js');
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -66,45 +66,135 @@ app.post('/api/profiles', async (req, res) => {
     }
 });
 
+// --- LOG STREAMING (SSE) ---
+let logClients = [];
+
+app.get('/api/stream-logs', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const clientId = Date.now();
+    const newClient = {
+        id: clientId,
+        res
+    };
+    logClients.push(newClient);
+
+    res.write(`data: ${JSON.stringify({ type: 'connected', id: clientId })}\n\n`);
+
+    req.on('close', () => {
+        logClients = logClients.filter(client => client.id !== clientId);
+    });
+});
+
+function broadcastLog(message, type = 'log', instanceId = null) {
+    // Basic filter to ignore boring logs
+    if (!message || message.length < 2) return;
+    
+    const packet = JSON.stringify({ type, message, instanceId });
+    logClients.forEach(client => {
+        client.res.write(`data: ${packet}\n\n`);
+    });
+}
+
+// API: Browser Status Updates
+app.post('/api/browser-status', (req, res) => {
+    const statusData = req.body;
+    // Broadcast as special 'status' type message
+    const packet = JSON.stringify({ type: 'status', ...statusData });
+    logClients.forEach(client => {
+        client.res.write(`data: ${packet}\n\n`);
+    });
+    res.json({ success: true });
+});
+
 // API: Launch Profile
 app.post('/api/launch', (req, res) => {
     console.log('>>> Received /api/launch request:', req.body);
-    const { profile, url } = req.body;
+    const { profile, url, prompt, headless, sessionMode } = req.body;
     if (!profile) return res.status(400).json({ error: 'Profile required' });
 
     console.log(`Launching profile: ${profile}...`);
+    broadcastLog(`Launching profile: ${profile}...`, 'log');
     
-    // Command: node open_fix.js --profile <name>
-    const args = ['open_fix.js', '--profile', profile]; 
-    if (url) {
-        args.push('--prompt', `vào "${url}"`);
+    // Command: node open.js --profile <name>
+    const args = ['open.js', '--profile', profile];  
+    
+    if (prompt) {
+        args.push('--prompt', prompt);
+        // Enable session mode by default for prompts (continuous actions)
+        if (sessionMode !== false) {
+            args.push('--session');
+            args.push('--session-duration', '10');
+        }
+    } else if (url) {
+        args.push('--prompt', `into "${url}"`);
     } else {
         args.push('--manual'); // Generic launch -> Manual Mode
     }
+    
+    // Add headless flag if requested
+    if (headless) {
+        args.push('--headless');
+    }
 
-    const logPath = path.join(PROJECT_ROOT, 'launcher.log');
-    const out = fs.openSync(logPath, 'a');
+    // Add model flag if provided
+    if (req.body.model) {
+        args.push('--model', req.body.model);
+    }
+    
+    // Generate unique instance ID for tracking
+    const instanceId = `browser-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    args.push('--instance-id', instanceId);
+    
+    console.log(`[Launch] Instance ID: ${instanceId}`);
 
+    // Use pipe for stdio so we can capture it
     const subprocess = spawn(process.execPath, args, {
         cwd: PROJECT_ROOT,
-        detached: true,
-        stdio: ['ignore', out, out], // Use file descriptor
+        detached: false, // Don't detach so we can capture output easily
         shell: false
     });
     
-    subprocess.on('error', (err) => {
-        console.error('FAILED to spawn open_fix.js:', err);
+    subprocess.stdout.on('data', (data) => {
+        const line = data.toString().trim();
+        console.log(`[BROWSER ${instanceId}] ${line}`);
+        broadcastLog(line, 'log', instanceId);
     });
 
-    if (subprocess.pid) {
-        console.log(`Spawned process with PID: ${subprocess.pid}`);
-    } else {
-        console.error('Spawned process has NO PID!');
-    }
-
-    subprocess.unref();
+    subprocess.stderr.on('data', (data) => {
+        const line = data.toString().trim();
+        console.error(`[BROWSER ERR ${instanceId}] ${line}`);
+        broadcastLog(line, 'error', instanceId);
+    });
     
-    res.json({ success: true, message: 'Browser launched in background' });
+    subprocess.on('error', (err) => {
+        console.error('FAILED to spawn open.js:', err);
+        broadcastLog(`Failed to spawn: ${err.message}`, 'error', instanceId);
+    });
+
+    subprocess.on('close', (code) => {
+        console.log(`[Browser Process ${instanceId}] Exited with code ${code}`);
+        broadcastLog(`Browser closed (Code: ${code})`, 'error', instanceId);
+        
+        // Send final status update to mark as disconnected
+        const packet = JSON.stringify({ 
+            type: 'status', 
+            instanceId, 
+            status: 'disconnected',
+            profile: profile, // Ensure profile is sent so UI can find it
+            url: '',
+            actionCount: 0,
+            lastAction: 'Session Ended'
+        });
+        logClients.forEach(client => {
+            client.res.write(`data: ${packet}\n\n`);
+        });
+    });
+
+    res.json({ success: true, message: 'Browser launched', pid: subprocess.pid, instanceId });
 });
 
 // API: Export Cookies (Calls open_fix.js --export-cookies)
@@ -114,7 +204,7 @@ app.get('/api/cookies/:profile', (req, res) => {
 
     console.log(`Exporting cookies for: ${profile}...`);
     
-    const child = spawn(process.execPath, ['open_fix.js', '--profile', profile, '--export-cookies'], {
+    const child = spawn(process.execPath, ['open.js', '--profile', profile, '--export-cookies'], {
         cwd: PROJECT_ROOT,
         shell: false
     });
