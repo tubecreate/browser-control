@@ -26,6 +26,7 @@ export class SessionManager {
     this.taskQueue = [];
     this.gpuUsageHistory = []; // Track last 1 minute of GPU usage
     this.MAX_GPU_HISTORY = 12; // 12 samples @ 5s interval = 1 minute
+    this.stats = null; // RPG Stats
   }
 
   /**
@@ -129,7 +130,14 @@ export class SessionManager {
       console.warn('[SessionManager] Failed to parse URL:', e.message);
     }
   }
-  
+
+  /**
+   * Update RPG Stats in session (for AI context)
+   */
+  updateStats(stats) {
+    this.stats = stats;
+  }
+
   /**
    * Check if stuck on same URL (for recovery)
    * Requires at least 5 consecutive actions on the same URL
@@ -603,8 +611,35 @@ export class SessionManager {
 ${potentialPopups.map((p, i) => `${i+1}. [${p.tag}] "${p.text}"`).join('\n')}\n`
       : '';
 
+    let statsContext = "";
+    if (this.stats) {
+        statsContext = `
+RPG STATS (YOU ARE A "${this.stats.class.toUpperCase()}" - Level ${this.stats.level}):
+- INT: ${this.stats.int} | IMPACT: ${this.stats.impact} | ASSIST: ${this.stats.assist} | MISTAKE: ${this.stats.mistake}
+GOAL: Improve your lowest stat while fulfilling the User Goal.
+Guidelines:
+${this.stats.class === 'Scholar' ? '- Focus on deep researching and reading.' : ''}
+${this.stats.class === 'Builder' ? '- Focus on creating content/comments.' : ''}
+${this.stats.class === 'Supporter' ? '- Focus on watching/liking.' : ''}
+`;
+    }
+
+    let identityContext = "";
+    if (this.agentContext) {
+        identityContext = `
+AGENT IDENTITY:
+Name: ${this.agentContext.name || 'Agent'}
+Role: ${this.agentContext.role || 'Assistant'}
+Tone: ${this.agentContext.tone || 'Neutral'}
+Routine: ${this.agentContext.routine ? JSON.stringify(this.agentContext.routine) : 'None'}
+Background: ${this.agentContext.background || ''}
+`;
+    }
+
     return `You are an autonomous browser agent.
 User Goal: "${this.userGoal}"
+${statsContext}
+${identityContext}
 Current Context: ${JSON.stringify(context, null, 2)}${contextHint}
 ${popupInfo}
 

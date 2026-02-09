@@ -170,8 +170,13 @@ export class BrowserManager {
              let fpAttempts = 0;
              while (fpAttempts < 2) {
                  try {
-                    plugin.useFingerprint(fingerprint);
-                    break; // Success
+                    // plugin.useFingerprint accepts either the fingerprint object or the token string
+                    if (fingerprint) {
+                        plugin.useFingerprint(fingerprint);
+                        break; // Success
+                    } else {
+                        throw new Error('Fingerprint is empty');
+                    }
                  } catch (e) {
                      console.error(`Error applying fingerprint (Attempt ${fpAttempts + 1}/2):`, e.message);
                      if (fpAttempts === 0) {
@@ -180,8 +185,7 @@ export class BrowserManager {
                              const fingerprintPath = path.join(profilePath, 'fingerprint.json');
                              await fs.remove(fingerprintPath);
                              // Fetch new one
-                             fingerprint = await this.getFingerprint(profileName);
-                             // Recursive call logic or just retry useFingerprint if we got a new one
+                             fingerprint = await this.getFingerprint(profileName, { tags: ['Microsoft Windows', 'Chrome'] });
                          } catch (err) {
                              console.error('Failed to refresh fingerprint:', err.message);
                          }
@@ -199,17 +203,121 @@ export class BrowserManager {
         // Default args
         const launchArgs = [
             '--start-maximized',
-            '--remote-debugging-port=0', // Random port
             ...args
         ];
 
         console.log(`Launching browser [Profile: ${profileName}]...`);
-        const context = await plugin.launchPersistentContext(profilePath, {
-            headless,
-            args: launchArgs,
-            userDataDir: profilePath // Explicitly set it, though launchPersistentContext does this
-        });
+        
+        // LAUNCH RETRY LOGIC (Specifically for "Failed to get proxy ip")
+        let launchAttempt = 1;
+        const maxLaunchAttempts = 3;
+        let lastError = null;
 
-        return context;
+        while (launchAttempt <= maxLaunchAttempts) {
+            try {
+                const context = await plugin.launchPersistentContext(profilePath, {
+                    headless,
+                    args: launchArgs,
+                    userDataDir: profilePath
+                });
+                return context;
+            } catch (e) {
+                lastError = e;
+                if (e.message.toLowerCase().includes('failed to get proxy ip') || 
+                    e.message.toLowerCase().includes('proxy') ||
+                    e.message.toLowerCase().includes('timeout')) {
+                    console.warn(`[Launch] Attempt ${launchAttempt} failed: ${e.message}. Retrying in 5 seconds...`);
+                    launchAttempt++;
+                    await new Promise(r => setTimeout(r, 5000));
+                } else {
+                    throw e; // Non-proxy error, fail immediately
+                }
+            }
+        }
+        
+        throw new Error(`Failed to launch browser after ${maxLaunchAttempts} attempts. Last error: ${lastError?.message}`);
+    }
+
+    async getStats(profileName) {
+        const profilePath = await this.ensureProfile(profileName);
+        const statsPath = path.join(profilePath, 'stats.json');
+        
+        if (await fs.pathExists(statsPath)) {
+            try {
+                return await fs.readJson(statsPath);
+            } catch (e) {
+                console.warn(`Failed to read stats for ${profileName}, resetting...`);
+            }
+        }
+        
+        // Default Stats
+        return {
+            level: 1,
+            class: 'Novice',
+            exp: 0,
+            impact: 0,
+            assist: 0,
+            mistake: 0,
+            int: 0, // Intelligence
+            apm: 0, // Actions Per Minute (tracked loosely)
+            kda: 0.0
+        };
+    }
+
+    async updateStats(profileName, actionType, context = {}) {
+        const stats = await this.getStats(profileName);
+        const profilePath = path.resolve(this.baseDir, profileName);
+        
+        // 1. Update Core Stats based on Action
+        switch (actionType) {
+            case 'search':
+            case 'browse':
+            case 'navigate':
+                // Check for INT growth (tech keywords)
+                const techKeywords = ['code', 'python', 'javascript', 'ai', 'data', 'algorithm', 'server', 'linux'];
+                const content = (context.keyword || context.url || '').toLowerCase();
+                if (techKeywords.some(k => content.includes(k))) {
+                    stats.int += 1;
+                }
+                break;
+                
+            case 'comment':
+            case 'type':
+                // Impact growth
+                stats.impact += 5; 
+                stats.int += 0.5;
+                break;
+                
+            case 'watch':
+            case 'click':
+            case 'like':
+                // Assist/Support growth
+                stats.assist += 1;
+                break;
+
+            case 'error':
+                stats.mistake += 1;
+                break;
+        }
+
+        // 2. Calculate KDA
+        // KDA = (Impact + Assist) / (Mistake || 1)
+        stats.kda = parseFloat(((stats.impact + stats.assist) / (stats.mistake || 1)).toFixed(2));
+
+        // 3. Level Up Logic (Simple EXP based on total actions)
+        stats.exp += 1;
+        stats.level = Math.floor(Math.sqrt(stats.exp) * 0.5) + 1;
+
+        // 4. Class Evolution
+        if (stats.level >= 5) {
+            if (stats.int > stats.impact && stats.int > stats.assist) stats.class = 'Scholar'; 
+            else if (stats.impact > stats.assist) stats.class = 'Builder'; 
+            else if (stats.assist > stats.impact) stats.class = 'Supporter';
+            else stats.class = 'Novice';
+        }
+        
+        // Save
+        await fs.writeJson(path.join(profilePath, 'stats.json'), stats, { spaces: 2 });
+        return stats;
     }
 }
