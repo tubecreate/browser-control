@@ -47,13 +47,31 @@ export async function click(page, params = {}) {
   if (selector) {
     target = page.locator(selector).first();
   } else if (params.text) {
-    console.log(`Searching for element with text: "${params.text}"`);
-    // 1. Exact/Partial text match
-    target = page.getByText(params.text, { exact: false }).first();
+    // Sanitize AI text: Remove prefixes like "Link:", "Button:"
+    let searchText = params.text.replace(/^(Link:|Button:|Click:)\s*/i, '').trim();
     
-    // 2. Fallback: Search in attributes (aria-label, title) if text match not visible
+    // Truncate long text to improve match rate (first 60 chars)
+    if (searchText.length > 60) {
+        searchText = searchText.substring(0, 60).trim();
+    }
+    
+    console.log(`Searching for element with text: "${searchText}" (Original: "${params.text}")`);
+    
+    // 1. Playwright getByText (smart fuzzy match)
+    target = page.getByText(searchText, { exact: false }).first();
+    
+    // 2. Fallback: XPath string contains (case-insensitive approximation)
     if (!(await target.isVisible().catch(() => false))) {
-       const attrSelector = `[aria-label*="${params.text}" i], [title*="${params.text}" i]`;
+       console.log('Standard match failed. Trying deep text search...');
+       // XPath 1.0 doesn't support lower-case easily, so we rely on Playwright's pseudo-selectors or simple contains
+       // Try a simpler partial match for the first few words
+       const shortText = searchText.split(' ').slice(0, 5).join(' ');
+       target = page.locator(`text=${shortText}`).first();
+    }
+
+    // 3. Fallback: Search in attributes (aria-label, title)
+    if (!(await target.isVisible().catch(() => false))) {
+       const attrSelector = `[aria-label*="${searchText}" i], [title*="${searchText}" i], [alt*="${searchText}" i]`;
        const attrTarget = page.locator(attrSelector).first();
        if (await attrTarget.isVisible().catch(() => false)) {
           target = attrTarget;
@@ -117,14 +135,33 @@ export async function click(page, params = {}) {
     }
   }
 
-  if (await target.isVisible()) {
+  // Final visibility and click attempt
+  let isVisible = await target.isVisible().catch(() => false);
+  
+  if (!isVisible) {
+      console.log('Target not immediately visible. Attempting to scroll into view...');
+      await target.scrollIntoViewIfNeeded().catch(() => {});
+      await page.waitForTimeout(1000);
+      isVisible = await target.isVisible().catch(() => false);
+  }
+
+  if (isVisible) {
     console.log('Clicking on target element...');
     const box = await target.boundingBox();
     if (box) {
       await humanMove(page, box.x + box.width / 2, box.y + box.height / 2);
       await page.waitForTimeout(500);
-      await target.click();
-      console.log('Click executed.');
+    }
+    
+    // Try regular click first, then force click if it fails
+    try {
+        await target.click({ timeout: 10000 });
+        console.log('Click executed.');
+    } catch (e) {
+        console.warn('Regular click failed, trying force click:', e.message);
+        await target.click({ force: true });
+        console.log('Force click executed.');
+    }
 
       // --- Post-Click Video Handling ---
       if (params.type === 'video') {
@@ -168,7 +205,6 @@ export async function click(page, params = {}) {
           console.warn('Video playback check failed:', e.message);
         }
       }
-    }
   } else {
     const msg = `Target element '${selector || 'default'}' not visible.`;
     console.warn(msg);
