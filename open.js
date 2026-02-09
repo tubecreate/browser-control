@@ -13,8 +13,8 @@ import * as watchAction from './actions/watch.js';
 import * as navigateAction from './actions/navigate.js';
 import * as typeAction from './actions/type.js';
 import * as saveImageAction from './actions/save_image.js';
-import { BrowserManager } from './browser_manager.js';
 import { SessionManager } from './session_manager.js';
+import { BrowserManager } from './browser_manager.js';
 import axios from 'axios';
 
 // Helper: Report Status to Web Manager
@@ -31,6 +31,37 @@ async function reportStatus(args, data) {
     }
 }
 
+// Helper: Fetch proxy from TMProxy (CURRENT ONLY)
+async function fetchProxyFromProvider(provider) {
+    if (!provider || !provider.api_key) return null;
+    try {
+        const apiKey = provider.api_key;
+        const endpoint = "https://tmproxy.com/api/proxy/get-current-proxy";
+        
+        console.log(`[ProxyFetch] Calling TMProxy: get-current-proxy...`);
+        const response = await axios.post(endpoint, {
+            api_key: apiKey
+        }, { timeout: 10000 });
+
+        const data = response.data;
+        if (data.code === 0 && data.data) {
+            const p = data.data;
+            const username = p.username || "";
+            const password = p.password || "";
+            const auth = username && password ? `${username}:${password}@` : "";
+            
+            if (p.socks5) return `socks5://${auth}${p.socks5}`;
+            if (p.https) return `http://${auth}${p.https}`;
+            if (p.http) return `http://${auth}${p.http}`;
+        } else {
+            console.warn(`[ProxyFetch] TMProxy: ${data.message || "Failed to get current proxy"}`);
+        }
+    } catch (e) {
+        console.error(`[ProxyFetch] Error: ${e.message}`);
+    }
+    return null;
+}
+
 // Action Registry
 const ACTION_REGISTRY = {
   navigate: navigateAction.navigate,
@@ -44,6 +75,8 @@ const ACTION_REGISTRY = {
   watch: watchAction.watch,
   visual_scan: visualScanAction.visual_scan
 };
+
+const browserManager = new BrowserManager();
 
 /**
  * Main Orchestrator
@@ -63,12 +96,36 @@ async function main() {
   const minSessionMinutes = parseInt(args['session-duration']) || 10;
   const aiModel = args['ai-model'] || 'deepseek-r1:latest'; // NEW: AI model for browser automation
   const cliTags = args['tags']; // Raw CLI arg for overrides
-  const proxy = args['proxy'] || ''; // NEW: Proxy support
   const instanceId = args['instance-id'] || null; // Instance ID from BrowserProcessManager
+  const proxyArg = args['proxy'] || ''; // CLI override
+  let proxy = proxyArg;
+
+  // --- Load Agent Context EARLY ---
+  let agentContext = null;
+  if (args['context-file']) {
+    try {
+        if (await fs.pathExists(args['context-file'])) {
+            agentContext = await fs.readJson(args['context-file']);
+            console.log(`[Launch] Loaded agent context for: ${agentContext.agent_name}`);
+        }
+    } catch (e) {
+        console.error('[Launch] Failed to load context file:', e.message);
+    }
+  }
   
   // Log instance ID if provided (for multi-instance tracking)
   if (instanceId) {
     console.log(`[InstanceID] ${instanceId}`);
+  }
+
+  // --- Handle Dynamic Proxy if config missing ---
+  if (!proxy && agentContext && agentContext.proxy_provider && agentContext.proxy_provider.mode === 'dynamic') {
+      console.log('[Launch] Proxy arg missing but Dynamic Mode detected. Fetching CURRENT proxy...');
+      const fetchedProxy = await fetchProxyFromProvider(agentContext.proxy_provider);
+      if (fetchedProxy) {
+          console.log(`[Launch] Using current proxy: ${fetchedProxy}`);
+          proxy = fetchedProxy;
+      }
   }
 
   // 1. Determine Action Sequence & Profile Override
@@ -159,9 +216,8 @@ async function main() {
   }
 
 
-
-  const browserManager = new BrowserManager();
-  console.log(`Target Profile: ${profileName}`);
+  const profilePath = path.resolve(`./profiles/${profileName}`);
+  console.log(`Target Profile: ${profileName} (${profilePath})`);
 
   // --- Multi-Attempt Logic ---
   let attempt = 1;
@@ -177,27 +233,83 @@ async function main() {
       console.log(`\n=== Execution Attempt ${attempt} (isRetry: ${isRetry}) ===`);
 
       // Handle profile clearing only if explicitly requested
-      if (isNewProfile && !exportCookies) {
-          await browserManager.cleanProfile(profileName);
+      if (isNewProfile && fs.existsSync(profilePath) && !exportCookies) {
+        console.log(`Cleaning up profile at ${profilePath}...`);
+        try {
+          // Preserve config.json and stats.json if they exist
+          const configPath = path.join(profilePath, 'config.json');
+          const statsPath = path.join(profilePath, 'stats.json');
+          
+          if (await fs.pathExists(configPath)) {
+             await fs.copy(configPath, `${configPath}.bak`);
+          }
+          if (await fs.pathExists(statsPath)) {
+             await fs.copy(statsPath, `${statsPath}.bak`);
+          }
+          
+          await fs.remove(profilePath);
+          await fs.mkdirp(profilePath);
+          
+          if (await fs.pathExists(`${configPath}.bak`)) {
+             await fs.move(`${configPath}.bak`, configPath, { overwrite: true });
+          }
+          if (await fs.pathExists(`${statsPath}.bak`)) {
+             await fs.move(`${statsPath}.bak`, statsPath, { overwrite: true });
+          }
+        } catch (e) {
+          console.warn(`Could not remove/restore profile directory: ${e.message}`);
+        }
       }
 
       // 2. Browser Initialization
       console.log('Fetching fingerprint...');
+      plugin.setServiceKey('dLeV7LSYY387fh9bVhxxxZcQVVQ4kR6eXSzOdnNJRfDj9eQ48be5ljPBzyBvPxfr');
+
       let fingerprint;
-      try {
-          // Determine tags
-          let tags = cliTags ? cliTags.split(',').map(t => t.trim()) : null;
-          fingerprint = await browserManager.getFingerprint(profileName, { tags });
-      } catch (e) {
-          console.warn('Fingerprint issue:', e.message);
-          if (attempt < maxAttempts) {
-             throw new Error('FINGERPRINT_RETRY');
+      const fingerprintPath = path.join(profilePath, 'fingerprint.json');
+      const configPath = path.join(profilePath, 'config.json');
+
+      if (await fs.pathExists(fingerprintPath)) {
+          console.log('Loading saved fingerprint...');
+          const fingerprintData = await fs.readFile(fingerprintPath, 'utf8');
+          try {
+              fingerprint = JSON.parse(fingerprintData);
+              if (!fingerprint || typeof fingerprint !== 'object' || Object.keys(fingerprint).length < 10) {
+                  throw new Error('Invalid or too small fingerprint object');
+              }
+              console.log(`Fingerprint loaded successfully (Size: ${Math.round(fingerprintData.length/1024)} KB)`);
+          } catch (e) {
+              console.warn('Failed to parse saved fingerprint JSON:', e.message);
+              fingerprint = null; // Force fetch
           }
+      } 
+      
+      if (!fingerprint) {
+          // Determine tags: CLI > Config > Default
+          let tags = ['Microsoft Windows', 'Chrome'];
+          
+          if (cliTags) {
+              tags = cliTags.split(',').map(t => t.trim());
+          } else if (await fs.pathExists(configPath)) {
+              const config = await fs.readJson(configPath);
+              if (config.tags && Array.isArray(config.tags)) {
+                  tags = config.tags;
+              }
+          }
+          
+          console.log(`Fetching NEW Fingerprint with tags: ${JSON.stringify(tags)}`);
+          fingerprint = await plugin.fetch({ tags });
+          
+          // Save for future use
+          await fs.ensureDir(profilePath);
+          await fs.outputFile(fingerprintPath, JSON.stringify(fingerprint), 'utf8');
       }
 
       console.log('Launching browser...');
+      const finalHeadless = isHeadless || !!exportCookies;
+      
       context = await browserManager.launch(profileName, {
-          headless: !!exportCookies,
+          headless: finalHeadless,
           fingerprint,
           proxy,
           args: [
@@ -218,9 +330,9 @@ async function main() {
           return process.exit(0);
       }
 
-      // --- MOUSE VISUALIZATION HELPER ---
-      // Use addInitScript to ensure visualization persists across navigations and tabs
-      await context.addInitScript(() => {
+      // --- BACKGROUND HELPERS (Mouse & IP Check) ---
+      await context.addInitScript(({ instanceId, profileName }) => {
+        // 1. Mouse Visualization
         window.addEventListener('DOMContentLoaded', () => {
           if (document.getElementById('mouse-pointer-visualization')) return;
           const box = document.createElement('div');
@@ -240,7 +352,35 @@ async function main() {
             box.style.transform = `translate(${e.clientX - 10}px, ${e.clientY - 10}px)`;
           });
         });
-      });
+
+        // 2. Background IP Check (Reporting to Node Server)
+        if (instanceId) {
+            const checkIP = async () => {
+                try {
+                    const resp = await fetch('https://ipwho.is/');
+                    const data = await resp.json();
+                    if (data && data.ip) {
+                        await fetch('http://localhost:3000/api/browser-status', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                instanceId,
+                                profile: profileName,
+                                ip: data.ip,
+                                city: data.city,
+                                country: data.country
+                            })
+                        });
+                    }
+                } catch (e) {
+                    // Fail silently in background
+                }
+            };
+            checkIP();
+            // Check every 2 minutes
+            setInterval(checkIP, 120000);
+        }
+      }, { instanceId, profileName });
 
       // --- TAB MANAGEMENT ---
       // Listen for new pages (tabs) and switch focus
@@ -248,46 +388,6 @@ async function main() {
         console.log('[TabManager] New tab detected! Switching focus...');
         page = newPage; // Update the main page reference
         console.log(`[TabManager] Now on: ${page.url()}`);
-      });
-
-      // --- BACKGROUND IP & LOCATION CHECK ---
-      // 1. Expose a binding to receive data from the browser context
-      await context.exposeBinding('reportPublicIP', async ({ page }, data) => {
-          console.log(`[Info] 🌍 Location Detected: ${data.ip} (${data.city}, ${data.country})`);
-          await reportStatus(args, { 
-              ip: data.ip, 
-              city: data.city, 
-              country: data.country,
-              server_time: data.timezone?.current_time || null,
-              status: 'connected' 
-          });
-      });
-
-      // 2. Inject script to fetch location data on every page load
-      await context.addInitScript(() => {
-          // Avoid running in iframes
-          if (window.self !== window.top) return;
-
-          // Only run once per page load
-          if (window._ipCheckStarted) return;
-          window._ipCheckStarted = true;
-
-          console.log('[Auto-IP] Checking location...');
-          
-          fetch('https://ipwho.is/')
-              .then(res => res.json())
-              .then(data => {
-                  if (data.success !== false) {
-                      window.reportPublicIP(data);
-                  } else {
-                      console.warn('[Auto-IP] Service failed:', data.message);
-                      // Fallback to simple IP
-                      return fetch('https://api.ipify.org?format=json')
-                        .then(r => r.json())
-                        .then(d => window.reportPublicIP({ ip: d.ip, city: 'Unknown', country: 'Unknown' }));
-                  }
-              })
-              .catch(err => console.warn('[Auto-IP] Network error:', err));
       });
 
       // 3. Manual Mode Check
@@ -379,6 +479,12 @@ async function main() {
 
         const session = new SessionManager(minSessionMinutes, userGoal, aiModel, agentContext);
         
+        // Initial Stat Load for AI context
+        try {
+          const initialStats = await browserManager.getStats(profileName);
+          session.updateStats(initialStats);
+        } catch (e) {}
+        
         console.log(`\n>>> STARTING SESSION MODE (${minSessionMinutes} min) with Model: ${aiModel} <<<`);
         console.log(`Goal: "${userGoal}"`);
         
@@ -401,6 +507,12 @@ async function main() {
             const currentUrl = page.url();
             const status = session.getStatus();
             
+            // Also fetch latest stats to display on dashboard
+            let stats = null;
+            try {
+              stats = await browserManager.getStats(profileName);
+            } catch (e) {}
+
             // Send status update to server for dashboard
             try {
               const fetch = (await import('node-fetch')).default;
@@ -413,7 +525,8 @@ async function main() {
                   url: currentUrl,
                   status: session.currentContext?.pageType || 'browsing',
                   actionCount: status.actionsCompleted,
-                  lastAction: `${status.elapsedMinutes}/${minSessionMinutes} min`
+                  lastAction: `${status.elapsedMinutes}/${minSessionMinutes} min`,
+                  stats: stats // Include RPG stats
                 })
               });
             } catch (e) {
@@ -492,13 +605,25 @@ async function main() {
                 try {
                   await actionFn(page, { ...nextAction.params, isRetry });
                   session.recordAction(nextAction.action, nextAction.params);
+                  
+                  // Update RPG Stats
+                  const updatedStats = await browserManager.updateStats(profileName, nextAction.action, {
+                    url: page.url(),
+                    keyword: nextAction.params.keyword
+                  });
+                  session.updateStats(updatedStats); // Sync with AI
                 } catch (actionError) {
+                  // Record error in stats
+                  const updatedStats = await browserManager.updateStats(profileName, 'error');
+                  session.updateStats(updatedStats); // Sync with AI
+
                   if (actionError.message === 'NO_VIDEO_FOUND') {
                     console.log('[Session] Fallback: No video found during watch. Switching to browse behavior...');
                     const browseFn = ACTION_REGISTRY['browse'];
                     if (browseFn) {
                       await browseFn(page, { iterations: 10 });
                       session.recordAction('browse', { iterations: 10, note: 'fallback from watch' });
+                      await browserManager.updateStats(profileName, 'browse');
                     }
                   } else {
                     console.warn(`[Session] Action error: ${actionError.message}. Skipping remaining chain.`);
@@ -517,11 +642,17 @@ async function main() {
           } catch (sessionError) {
             console.error(`[Session] Error during action: ${sessionError.message}`);
             
-            // CRITICAL: Detect browser crash - cannot be recovered in-session
+            // CRITICAL: Detect browser crash or Network failure - cannot be recovered in-session
             if (sessionError.message.includes('Page crashed') || 
                 sessionError.message.includes('Target crashed') ||
-                sessionError.message.includes('Browser closed')) {
-              console.error('[Session] CRITICAL: Browser crashed. Restarting browser required.');
+                sessionError.message.includes('Browser closed') ||
+                sessionError.message.includes('ERR_PROXY_CONNECTION_FAILED') ||
+                sessionError.message.includes('ERR_TUNNEL_CONNECTION_FAILED') ||
+                sessionError.message.includes('ERR_CONNECTION_RESET') ||
+                sessionError.message.includes('ERR_NAME_NOT_RESOLVED') ||
+                sessionError.message.includes('ERR_CONNECTION_TIMED_OUT') ||
+                sessionError.message.includes('ERR_CONNECTION_CLOSED')) {
+              console.error(`[Session] CRITICAL: ${sessionError.message}. Restarting browser required.`);
               throw new Error('BROWSER_CRASHED'); // Signal outer retry loop to restart
             }
             
@@ -592,7 +723,15 @@ async function main() {
       } else if (error.message === 'FINGERPRINT_RETRY' && attempt < maxAttempts) {
         console.error('\n>>> Retrying with fresh fingerprint...');
         attempt++;
-      } else if ((error.message.includes('Page crashed') || error.message.includes('Target page, context or browser has been closed') || error.message.includes('Target closed') || error.message.includes('ERR_CONNECTION_TIMED_OUT')) && attempt < maxAttempts) {
+      } else if ((error.message.includes('Page crashed') || 
+                  error.message.includes('Target page, context or browser has been closed') || 
+                  error.message.includes('Target closed') || 
+                  error.message.includes('ERR_CONNECTION_TIMED_OUT') ||
+                  error.message.includes('ERR_PROXY_CONNECTION_FAILED') ||
+                  error.message.includes('ERR_TUNNEL_CONNECTION_FAILED') ||
+                  error.message.includes('ERR_CONNECTION_RESET') ||
+                  error.message.includes('ERR_NAME_NOT_RESOLVED') ||
+                  error.message.includes('ERR_CONNECTION_CLOSED')) && attempt < maxAttempts) {
         console.error(`\n>>> Browser Crash/Network Error detected: ${error.message}. Retrying...`);
         attempt++;
       } else if (error.message === 'CAPTCHA_TIMEOUT') {
