@@ -13,7 +13,23 @@ import * as watchAction from './actions/watch.js';
 import * as navigateAction from './actions/navigate.js';
 import * as typeAction from './actions/type.js';
 import * as saveImageAction from './actions/save_image.js';
+import { BrowserManager } from './browser_manager.js';
 import { SessionManager } from './session_manager.js';
+import axios from 'axios';
+
+// Helper: Report Status to Web Manager
+async function reportStatus(args, data) {
+    if (!args['instance-id']) return;
+    try {
+        await axios.post('http://localhost:3000/api/browser-status', {
+            instanceId: args['instance-id'],
+            profile: args.profile,
+            ...data
+        });
+    } catch (e) {
+        // Ignore connection errors
+    }
+}
 
 // Action Registry
 const ACTION_REGISTRY = {
@@ -47,6 +63,7 @@ async function main() {
   const minSessionMinutes = parseInt(args['session-duration']) || 10;
   const aiModel = args['ai-model'] || 'deepseek-r1:latest'; // NEW: AI model for browser automation
   const cliTags = args['tags']; // Raw CLI arg for overrides
+  const proxy = args['proxy'] || ''; // NEW: Proxy support
   const instanceId = args['instance-id'] || null; // Instance ID from BrowserProcessManager
   
   // Log instance ID if provided (for multi-instance tracking)
@@ -142,8 +159,9 @@ async function main() {
   }
 
 
-  const profilePath = path.resolve(`./profiles/${profileName}`);
-  console.log(`Target Profile: ${profileName} (${profilePath})`);
+
+  const browserManager = new BrowserManager();
+  console.log(`Target Profile: ${profileName}`);
 
   // --- Multi-Attempt Logic ---
   let attempt = 1;
@@ -159,84 +177,32 @@ async function main() {
       console.log(`\n=== Execution Attempt ${attempt} (isRetry: ${isRetry}) ===`);
 
       // Handle profile clearing only if explicitly requested
-      if (isNewProfile && fs.existsSync(profilePath) && !exportCookies) {
-        console.log(`Cleaning up profile at ${profilePath}...`);
-        try {
-          // Preserve config.json if it exists
-          const configPath = path.join(profilePath, 'config.json');
-          if (await fs.pathExists(configPath)) {
-             await fs.copy(configPath, `${configPath}.bak`);
-          }
-          await fs.remove(profilePath);
-          await fs.mkdirp(profilePath);
-          if (await fs.pathExists(`${configPath}.bak`)) {
-             await fs.move(`${configPath}.bak`, configPath);
-          }
-        } catch (e) {
-          console.warn(`Could not remove/restore profile directory: ${e.message}`);
-        }
+      if (isNewProfile && !exportCookies) {
+          await browserManager.cleanProfile(profileName);
       }
 
       // 2. Browser Initialization
       console.log('Fetching fingerprint...');
-      plugin.setServiceKey('dLeV7LSYY387fh9bVhxxxZcQVVQ4kR6eXSzOdnNJRfDj9eQ48be5ljPBzyBvPxfr');
-
       let fingerprint;
-      const fingerprintPath = path.join(profilePath, 'fingerprint.json');
-      const configPath = path.join(profilePath, 'config.json');
-
-      if (await fs.pathExists(fingerprintPath)) {
-          console.log('Loading saved fingerprint...');
-          const fingerprintData = await fs.readFile(fingerprintPath, 'utf8');
-          try {
-              fingerprint = JSON.parse(fingerprintData);
-              if (!fingerprint || typeof fingerprint !== 'object' || Object.keys(fingerprint).length < 10) {
-                  throw new Error('Invalid or too small fingerprint object');
-              }
-              console.log(`Fingerprint loaded successfully (Size: ${Math.round(fingerprintData.length/1024)} KB)`);
-          } catch (e) {
-              console.warn('Failed to parse saved fingerprint JSON:', e.message);
-              fingerprint = null; // Force fetch
-          }
-      } 
-      
-      if (!fingerprint) {
-          // Determine tags: CLI > Config > Default
-          let tags = ['Microsoft Windows', 'Chrome'];
-          
-          if (cliTags) {
-              tags = cliTags.split(',').map(t => t.trim());
-          } else if (await fs.pathExists(configPath)) {
-              const config = await fs.readJson(configPath);
-              if (config.tags && Array.isArray(config.tags)) {
-                  tags = config.tags;
-              }
-          }
-          
-          console.log(`Fetching NEW Fingerprint with tags: ${JSON.stringify(tags)}`);
-          fingerprint = await plugin.fetch({ tags });
-          
-          // Save for future use
-          await fs.ensureDir(profilePath);
-          await fs.outputFile(fingerprintPath, JSON.stringify(fingerprint), 'utf8');
-      }
-
-      console.log('Applying fingerprint and launching browser...');
       try {
-          plugin.useFingerprint(fingerprint);
-      } catch (fpError) {
-          console.warn('Fingerprint corrupted/invalid:', fpError.message);
-          console.log('Deleting corrupted fingerprint and retrying...');
-          await fs.remove(fingerprintPath);
-          throw new Error('FINGERPRINT_RETRY');
+          // Determine tags
+          let tags = cliTags ? cliTags.split(',').map(t => t.trim()) : null;
+          fingerprint = await browserManager.getFingerprint(profileName, { tags });
+      } catch (e) {
+          console.warn('Fingerprint issue:', e.message);
+          if (attempt < maxAttempts) {
+             throw new Error('FINGERPRINT_RETRY');
+          }
       }
 
-      context = await plugin.launchPersistentContext(profilePath, {
-        headless: !!exportCookies, // Headless if just exporting
-        args: [
-            '--start-maximized',
-            '--remote-debugging-port=0' // Force random port for parallelism
-        ],
+      console.log('Launching browser...');
+      context = await browserManager.launch(profileName, {
+          headless: !!exportCookies,
+          fingerprint,
+          proxy,
+          args: [
+              '--remote-debugging-port=0' // Force random port
+          ]
       });
 
       // Ensure a page exists immediately
@@ -283,6 +249,28 @@ async function main() {
         page = newPage; // Update the main page reference
         console.log(`[TabManager] Now on: ${page.url()}`);
       });
+
+      // --- IP CHECK & REPORTING ---
+      try {
+          // Quick navigation to check IP
+          console.log('[Info] Checking public IP...');
+          // Use a lightweight IP service
+          await page.goto('https://api.ipify.org?format=json', { timeout: 10000 });
+          const content = await page.content();
+          const ipData = await page.evaluate(() => {
+              try {
+                  return JSON.parse(document.body.innerText);
+              } catch { return null; }
+          });
+          
+          if (ipData && ipData.ip) {
+              console.log(`[Info] Public IP: ${ipData.ip}`);
+              // Report status back to manager
+              await reportStatus(args, { ip: ipData.ip, status: 'connected' });
+          }
+      } catch (e) {
+          console.warn('[Info] Failed to check IP:', e.message);
+      }
 
       // 3. Manual Mode Check
       if (isManual) {

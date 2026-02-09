@@ -113,7 +113,7 @@ app.post('/api/browser-status', (req, res) => {
 // API: Launch Profile
 app.post('/api/launch', async (req, res) => {
     console.log('>>> Received /api/launch request:', req.body);
-    const { profile, url, prompt, headless, sessionMode } = req.body;
+    const { profile, url, prompt, headless, sessionMode, proxy } = req.body;
     if (!profile) return res.status(400).json({ error: 'Profile required' });
 
     console.log(`Launching profile: ${profile}...`);
@@ -121,6 +121,11 @@ app.post('/api/launch', async (req, res) => {
     
     // Command: node open.js --profile <name>
     const args = ['open.js', '--profile', profile];  
+    
+    // Add proxy if provided (overrides profile config)
+    if (proxy) {
+        args.push('--proxy', proxy);
+    }
     
     if (prompt) {
         args.push('--prompt', prompt);
@@ -282,7 +287,7 @@ app.get('/api/profile-config/:name', async (req, res) => {
 app.post('/api/profile-config/:name', async (req, res) => {
     try {
         const { name } = req.params;
-        const { tags, notes, resetFingerprint } = req.body;
+        const { tags, notes, proxy, resetFingerprint } = req.body;
         
         const profilePath = path.join(PROFILES_DIR, name);
         const configPath = path.join(profilePath, 'config.json');
@@ -293,7 +298,8 @@ app.post('/api/profile-config/:name', async (req, res) => {
 
         const config = { 
             tags: tags || ['Microsoft Windows', 'Chrome'], 
-            notes: notes || '' 
+            notes: notes || '',
+            proxy: proxy || ''
         };
         
         await fs.writeJson(configPath, config, { spaces: 2 });
