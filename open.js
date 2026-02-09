@@ -250,27 +250,45 @@ async function main() {
         console.log(`[TabManager] Now on: ${page.url()}`);
       });
 
-      // --- IP CHECK & REPORTING ---
-      try {
-          // Quick navigation to check IP
-          console.log('[Info] Checking public IP...');
-          // Use a lightweight IP service
-          await page.goto('https://api.ipify.org?format=json', { timeout: 10000 });
-          const content = await page.content();
-          const ipData = await page.evaluate(() => {
-              try {
-                  return JSON.parse(document.body.innerText);
-              } catch { return null; }
+      // --- BACKGROUND IP & LOCATION CHECK ---
+      // 1. Expose a binding to receive data from the browser context
+      await context.exposeBinding('reportPublicIP', async ({ page }, data) => {
+          console.log(`[Info] 🌍 Location Detected: ${data.ip} (${data.city}, ${data.country})`);
+          await reportStatus(args, { 
+              ip: data.ip, 
+              city: data.city, 
+              country: data.country,
+              server_time: data.timezone?.current_time || null,
+              status: 'connected' 
           });
+      });
+
+      // 2. Inject script to fetch location data on every page load
+      await context.addInitScript(() => {
+          // Avoid running in iframes
+          if (window.self !== window.top) return;
+
+          // Only run once per page load
+          if (window._ipCheckStarted) return;
+          window._ipCheckStarted = true;
+
+          console.log('[Auto-IP] Checking location...');
           
-          if (ipData && ipData.ip) {
-              console.log(`[Info] Public IP: ${ipData.ip}`);
-              // Report status back to manager
-              await reportStatus(args, { ip: ipData.ip, status: 'connected' });
-          }
-      } catch (e) {
-          console.warn('[Info] Failed to check IP:', e.message);
-      }
+          fetch('https://ipwho.is/')
+              .then(res => res.json())
+              .then(data => {
+                  if (data.success !== false) {
+                      window.reportPublicIP(data);
+                  } else {
+                      console.warn('[Auto-IP] Service failed:', data.message);
+                      // Fallback to simple IP
+                      return fetch('https://api.ipify.org?format=json')
+                        .then(r => r.json())
+                        .then(d => window.reportPublicIP({ ip: d.ip, city: 'Unknown', country: 'Unknown' }));
+                  }
+              })
+              .catch(err => console.warn('[Auto-IP] Network error:', err));
+      });
 
       // 3. Manual Mode Check
       if (isManual) {
