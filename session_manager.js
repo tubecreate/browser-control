@@ -169,8 +169,11 @@ export class SessionManager {
         // Error Detection
         const isErrorPage = 
           bodyText.includes("This site can't be reached") ||
+          bodyText.includes("Không thể truy cập trang web này") ||
           bodyText.includes("ERR_NAME_NOT_RESOLVED") ||
           bodyText.includes("ERR_CONNECTION_TIMED_OUT") ||
+          bodyText.includes("ERR_CONNECTION_CLOSED") ||
+          bodyText.includes("ERR_PROXY_CONNECTION_FAILED") ||
           bodyText.includes("DNS_PROBE_FINISHED_NXDOMAIN") ||
           bodyText.includes("500 Internal Server Error") ||
           bodyText.includes("404 Not Found");
@@ -279,20 +282,8 @@ export class SessionManager {
     }
 
     if (pageContent && (pageContent.isErrorPage || pageContent.hasCaptcha)) {
-      console.log('[SessionManager] Critical page issue detected. Triggering NEW TASK recovery.');
-      const safeSites = [
-        'https://news.google.com',
-        'https://www.youtube.com',
-        'https://github.com/trending'
-      ];
-      const randomSite = safeSites[Math.floor(Math.random() * safeSites.length)];
-      return { 
-        action: 'search', 
-        params: { 
-          keyword: randomSite, 
-          forceNavigation: true 
-        } 
-      };
+        // Just return null/nothing here so scanPageContent findings can be handled by open.js orchestrator
+        return null;
     }
 
     if (this.hasReachedMinimum()) {

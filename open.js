@@ -73,7 +73,12 @@ const ACTION_REGISTRY = {
   login: loginAction.login,
   comment: commentAction.comment,
   watch: watchAction.watch,
-  visual_scan: visualScanAction.visual_scan
+  visual_scan: visualScanAction.visual_scan,
+  wait: async (page, params) => {
+    const duration = parseInt(params.duration) || 5;
+    console.log(`[WAIT] Waiting for ${duration} seconds...`);
+    await page.waitForTimeout(duration * 1000);
+  }
 };
 
 const browserManager = new BrowserManager();
@@ -577,6 +582,13 @@ async function main() {
             
             // DYNAMIC: Scan page content to detect available elements
             const pageContent = await session.scanPageContent(page);
+            
+            if (pageContent.isErrorPage) {
+                console.log('\n[Session] ❌ Network error page detected (Vietnamese or English).');
+                console.log('[Session] Waiting 30 seconds before rotating proxy and restarting...');
+                await page.waitForTimeout(30000);
+                throw new Error('BROWSER_CRASHED'); // Force rotation by crashing to outer loop
+            }
             
             // Generate next action chain based on actual page content (await async AI generation)
             const actionChain = await session.generateNextAction(page, pageContent);
