@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Overlay</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 10px;
+            background-color: transparent; 
+            overflow: hidden;
+            font-family: 'Consolas', 'Courier New', monospace;
+            display: flex;
+            justify-content: flex-end; 
+            align-items: flex-start;
+            height: 100vh;
+            pointer-events: none;
+        }
+        
+        #terminal-container {
+            background-color: #0c0c0c;
+            color: #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            width: 350px;
+            display: flex;
+            flex-direction: column;
+            pointer-events: auto;
+            border: 1px solid #333;
+            animation: slideDown 0.3s ease-out forwards;
+            overflow: hidden;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .term-header {
+            background: #1f1f1f;
+            padding: 5px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            cursor: grab;
+        }
+        
+        .term-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #ddd;
+        }
+        
+        .term-controls {
+            display: flex;
+            gap: 6px;
+        }
+        
+        .circle { width: 10px; height: 10px; border-radius: 50%; }
+        .red { background: #ff5f56; }
+        .yellow { background: #ffbd2e; }
+        .green { background: #27c93f; }
+
+        .term-body {
+            padding: 10px;
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+            height: 180px;
+        }
+        
+        #avatar-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-width: 80px;
+        }
+        
+        canvas {
+            image-rendering: pixelated; 
+            border: 2px solid #333;
+            border-radius: 4px;
+            background: #1a1a1a;
+        }
+        
+        .status-badge {
+            margin-top: 5px;
+            font-size: 10px;
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #fff;
+            text-transform: uppercase;
+        }
+
+        #log-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #log-window {
+            flex: 1;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #a0a0a0;
+            scrollbar-width: thin;
+            scrollbar-color: #444 #1a1a1a;
+        }
+        
+        #log-window::-webkit-scrollbar { width: 6px; }
+        #log-window::-webkit-scrollbar-track { background: #1a1a1a; }
+        #log-window::-webkit-scrollbar-thumb { background: #444; }
+
+        .log-entry { margin-bottom: 2px; }
+        .log-time { color: #555; margin-right: 4px; }
+        .log-info { color: #ccc; }
+        .log-error { color: #ff5f56; }
+        .log-cmd { color: #27c93f; }
+        
+        .cursor {
+            display: inline-block;
+            width: 6px;
+            height: 12px;
+            background: #27c93f;
+            animation: blink 1s step-end infinite;
+            vertical-align: middle;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+    </style>
+</head>
+<body>
+
+    <div id="terminal-container">
+        <div class="term-header">
+            <span class="term-title">Agent Terminal</span>
+            <div class="term-controls">
+                <div class="circle green"></div>
+                <div class="circle yellow"></div>
+                <div class="circle red" style="cursor:pointer;" onclick="window.close()"></div>
+            </div>
+        </div>
+        
+        <div class="term-body">
+            <div id="avatar-section">
+                <canvas id="avatarCanvas" width="64" height="64"></canvas>
+                <div class="status-badge" id="agentStatus">IDLE</div>
+            </div>
+            
+            <div id="log-section">
+                <div id="log-window">
+                    <div class="log-entry"><span class="log-info">System initialized...</span></div>
+                    <div class="log-entry"><span class="log-info">Waiting for agent...</span></div>
+                </div>
+                <div style="margin-top:5px; border-top:1px solid #333; padding-top:2px;">
+                    <span style="color:#27c93f;">&gt;</span> <span id="current-cmd" style="font-size:11px; color:#fff;">_</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="avatars.js"></script>
+    <script>
+        // Init Avatar
+        const avatar = new PixelAvatar('avatarCanvas', {
+            type: 'bot',
+            color: 'blue',
+            scale: 5 // 64 / 12 ~= 5.3
+        });
+        
+        const elStatus = document.getElementById('agentStatus');
+        const elLogWindow = document.getElementById('log-window');
+        const elCmd = document.getElementById('current-cmd');
+
+        function addLog(msg, type='info') {
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            
+            const time = new Date().toLocaleTimeString('en-US', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+            
+            let colorClass = 'log-info';
+            if (type === 'error') colorClass = 'log-error';
+            if (msg.startsWith('>')) colorClass = 'log-cmd';
+            
+            div.innerHTML = `<span class="log-time">[${time}]</span><span class="${colorClass}">${msg}</span>`;
+            elLogWindow.appendChild(div);
+            elLogWindow.scrollTop = elLogWindow.scrollHeight;
+        }
+
+        // Connect to SSE
+        const evtSource = new EventSource('/api/stream-logs');
+        
+        evtSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'log' || data.type === 'error') {
+                    const msg = data.message;
+                    addLog(msg, data.type);
+                    
+                    // Update Status & Avatar Action
+                    const lowerMsg = msg.toLowerCase();
+                    if (lowerMsg.includes('navig') || lowerMsg.includes('search')) {
+                        updateStatus('SEARCH', 'search');
+                    } else if (lowerMsg.includes('read') || lowerMsg.includes('extract')) {
+                        updateStatus('READING', 'read');
+                    } else if (lowerMsg.includes('watch') || lowerMsg.includes('play')) {
+                        updateStatus('WATCHING', 'watch');
+                    } else if (lowerMsg.includes('type') || lowerMsg.includes('input')) {
+                        updateStatus('TYPING', 'read');
+                    } else if (lowerMsg.includes('click')) {
+                        updateStatus('CLICKING', 'idle');
+                    }
+                    
+                    // Mock Typing Effect for "Current Command"
+                    if (msg.length < 30) elCmd.textContent = msg;
+                } 
+                else if (data.type === 'connected') {
+                    addLog('Connected to Agent Stream');
+                }
+                
+            } catch (e) {
+                console.error(e);
+            }
+        };
+        
+        function updateStatus(text, action) {
+            elStatus.textContent = text;
+            if (avatar.currentAction !== action) {
+                avatar.setAction(action);
+            }
+        }
+        
+    </script>
+</body>
+</html>

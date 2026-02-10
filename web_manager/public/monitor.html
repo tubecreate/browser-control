@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Manager</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f0f0f;
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Header */
+        #header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        #header h1 {
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255,255,255,0.15);
+            padding: 5px 12px;
+            border-radius: 12px;
+        }
+
+        /* Main Content */
+        #main {
+            height: calc(100vh - 60px);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        /* Browser List */
+        #browser-list {
+            display: grid;
+            gap: 15px;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+        }
+
+        .browser-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 15px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .browser-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+
+        .browser-card.active {
+            border-color: #27c93f;
+        }
+
+        /* Hide Stopped Sessions */
+        #browser-list.hide-stopped .browser-card.disconnected {
+            display: none;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .profile-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .avatar-mini {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: #2a2a2a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .profile-name {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .status-badge {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        .status-active { background: #27c93f; color: #000; }
+        .status-idle { background: #ffbd2e; color: #000; }
+        .status-error { background: #ff5f56; color: #fff; }
+
+        .card-url {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .card-url a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .card-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            padding-top: 10px;
+            border-top: 1px solid #333;
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .card-action {
+            color: #888;
+            font-size: 11px;
+            margin-top: 8px;
+            font-style: italic;
+        }
+
+        /* Empty State */
+        #empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        #empty-state .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        /* Terminal Overlay */
+        #terminal-overlay {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 450px;
+            max-height: 400px;
+            background: #0c0c0c;
+            border: 1px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.8);
+            display: none;
+            flex-direction: column;
+        }
+
+        #terminal-overlay.visible {
+            display: flex;
+        }
+
+        .terminal-header {
+            background: #1f1f1f;
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            cursor: move;
+        }
+
+        .terminal-title {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .terminal-close {
+            cursor: pointer;
+            color: #ff5f56;
+            font-size: 16px;
+        }
+
+        #log-window {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        .log-entry {
+            margin-bottom: 3px;
+            word-wrap: break-word;
+        }
+
+        .log-time { color: #555; margin-right: 4px; }
+        .log-info { color: #ccc; }
+        .log-error { color: #ff5f56; }
+        .log-success { color: #27c93f; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>🤖 Browser Manager</h1>
+        <div class="header-stats">
+            <div class="stat-item" style="background: rgba(255,255,255,0.05); padding: 5px 10px; border-radius: 8px; cursor: pointer; user-select: none;" id="toggle-stopped">
+                <input type="checkbox" id="show-stopped-check" style="cursor: pointer;">
+                <label for="show-stopped-check" style="cursor: pointer; font-size: 11px; margin-left: 5px;">Show Stopped</label>
+            </div>
+            <div class="stat-item">
+                <span>🟢</span>
+                <span id="active-count">0 Active</span>
+            </div>
+            <div class="stat-item">
+                <span>📊</span>
+                <span id="total-actions">0 Actions</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="main">
+        <div id="browser-list" class="hide-stopped">
+            <!-- Browser cards will be added here dynamically -->
+        </div>
+
+        <div id="empty-state">
+            <div class="icon">🌐</div>
+            <h3>No browsers running</h3>
+            <p style="margin-top: 10px;">Start a bot from the Python app to see it here</p>
+        </div>
+    </div>
+
+    <!-- Terminal Overlay -->
+    <div id="terminal-overlay">
+        <div class="terminal-header">
+            <div class="terminal-title">📝 Logs: <span id="selected-profile">-</span></div>
+            <div class="terminal-close" onclick="closeTerminal()">✕</div>
+        </div>
+        <div id="log-window">
+            <div class="log-entry"><span class="log-info">Click a browser to view logs</span></div>
+        </div>
+    </div>
+
+    </script>
+    <script src="avatars.js"></script>
+    <script>
+        const browserList = document.getElementById('browser-list');
+        const emptyState = document.getElementById('empty-state');
+        const activeCountEl = document.getElementById('active-count');
+        const totalActionsEl = document.getElementById('total-actions');
+        const toggleStopped = document.getElementById('toggle-stopped');
+        const showStoppedCheck = document.getElementById('show-stopped-check');
+        const terminalOverlay = document.getElementById('terminal-overlay');
+        const logWindow = document.getElementById('log-window');
+        const selectedProfileEl = document.getElementById('selected-profile');
+
+        let browsers = {}; // Store browser instances by instanceId
+        let selectedBrowser = null;
+        let logs = {}; // Store logs per instanceId
+
+        // SSE for log streaming
+        const evtSource = new EventSource('/api/stream-logs');
+        
+        evtSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'status') {
+                    updateBrowserStatus(data);
+                } else if (data.type === 'log' || data.type === 'error') {
+                    addLog(data.instanceId, data.message, data.type);
+                }
+            } catch (e) {
+                console.error('SSE error:', e);
+            }
+        };
+
+        function updateBrowserStatus(data) {
+            const { instanceId, profile, url, status, actionCount, lastAction, stats } = data;
+            
+            if (!browsers[instanceId]) {
+                if (status === 'disconnected') return; // Don't create card for dead browser
+                
+                browsers[instanceId] = { 
+                    instanceId, 
+                    profile, 
+                    url, 
+                    status, 
+                    actionCount: 0, 
+                    lastAction: '',
+                    lastActionTime: Date.now(),
+                    avatar: null,
+                    ip: null,
+                    city: null,
+                    country: null,
+                    stats: stats || {}
+                };
+                createBrowserCard(instanceId);
+            }
+
+            const browser = browsers[instanceId];
+            browser.url = url || browser.url;
+            browser.status = status || browser.status;
+            browser.actionCount = actionCount !== undefined ? actionCount : browser.actionCount; // valid usage
+            browser.lastAction = lastAction || browser.lastAction;
+            if (stats) browser.stats = stats;
+            
+            if (data.ip) {
+                browser.ip = data.ip;
+                browser.city = data.city;
+                browser.country = data.country;
+            }
+
+            updateBrowserCard(instanceId);
+            updateStats();
+            
+            // Handle Disconnected State
+            if (status === 'disconnected') {
+                const card = document.getElementById(`card-${instanceId}`);
+                if (card) {
+                    card.classList.remove('active');
+                    card.classList.add('disconnected');
+                    card.style.opacity = '0.5';
+                    card.style.borderColor = '#444';
+                    
+                    const badge = card.querySelector('.status-badge');
+                    if (badge) {
+                        badge.className = 'status-badge status-idle'; // Greyish
+                        badge.textContent = 'STOPPED';
+                        badge.style.background = '#444';
+                        badge.style.color = '#ccc';
+                    }
+                    
+                    if (browser.avatar) {
+                        browser.avatar.setMood('bored'); // Sleep
+                        browser.avatar.setAction('idle');
+                    }
+                }
+                return;
+            }
+            
+            // Update Avatar Action based on status
+            if (browser.avatar) {
+                const lowerStatus = (status || '').toLowerCase();
+                if (lowerStatus.includes('search')) browser.avatar.setAction('search');
+                else if (lowerStatus.includes('read') || lowerStatus.includes('extract')) browser.avatar.setAction('read');
+                else if (lowerStatus.includes('watch') || lowerStatus.includes('play')) browser.avatar.setAction('watch');
+                else browser.avatar.setAction('idle');
+            }
+        }
+
+        function createBrowserCard(instanceId) {
+            const browser = browsers[instanceId];
+            const card = document.createElement('div');
+            card.className = 'browser-card active';
+            card.id = `card-${instanceId}`;
+            card.onclick = () => selectBrowser(instanceId);
+
+            // Generate deterministic color/type based on profile name
+            const colors = ['blue', 'red', 'green', 'orange', 'purple', 'teal', 'pink'];
+            const avatarTypes = ['bot', 'dog', 'cat', 'capybara', 'bird'];
+            const hash = browser.profile.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            const color = colors[hash % colors.length];
+            const type = avatarTypes[hash % avatarTypes.length];
+
+            let locationText = 'Checking location...';
+            if (browser.ip) {
+                locationText = `${browser.ip}`;
+                if (browser.city) locationText += ` (${browser.city}, ${browser.country})`;
+            }
+
+            const level = browser.stats?.level || 1;
+            const cls = browser.stats?.class || 'Novice';
+            const kda = browser.stats?.kda || '0.0';
+
+            card.innerHTML = `
+                <div class="card-header">
+                    <div class="profile-info">
+                        <canvas id="avatar-${instanceId}" width="48" height="48" class="avatar-mini-canvas" style="border-radius: 6px; background: #2a2a2a;"></canvas>
+                        <div class="profile-name">
+                            ${browser.profile}
+                            <div style="font-size: 10px; color: #888; margin-top: 2px;">LVL ${level} • ${cls}</div>
+                        </div>
+                    </div>
+                    <div class="status-badge status-active">ACTIVE</div>
+                </div>
+                <div class="card-url">
+                    <a href="${browser.url || '#'}" target="_blank">${browser.url || 'Loading...'}</a>
+                </div>
+                <div class="card-ip" style="font-size: 11px; color: #aaa; margin-bottom: 8px;">
+                    📍 ${locationText}
+                </div>
+                <div class="card-stats" style="display: flex; gap: 8px; font-size: 11px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px;">
+                    <div class="stat">
+                        <div class="stat-label">Actions</div>
+                        <div class="stat-value action-count">${browser.actionCount}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">KDA</div>
+                        <div class="stat-value stat-kda" style="color: #FFC107;">${kda}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">INT</div>
+                        <div class="stat-value stat-int" style="color: #2196F3;">${browser.stats?.int || 0}</div>
+                    </div>
+                </div>
+                <div class="card-action" style="margin-top: 8px;">${browser.lastAction || 'Initializing...'}</div>
+            `;
+
+            browserList.appendChild(card);
+            emptyState.style.display = 'none';
+
+            // Initialize Avatar
+            // Wait slightly for DOM
+            setTimeout(() => {
+                const avatar = new PixelAvatar(`avatar-${instanceId}`, {
+                    type: type,
+                    color: color,
+                    scale: 4
+                });
+                browsers[instanceId].avatar = avatar;
+            }, 50);
+        }
+
+        function updateBrowserCard(instanceId) {
+            const card = document.getElementById(`card-${instanceId}`);
+            if (!card) return;
+
+            const browser = browsers[instanceId];
+            const urlLink = card.querySelector('.card-url a');
+            if (urlLink) {
+                urlLink.textContent = browser.url || 'Loading...';
+                urlLink.href = browser.url || '#';
+            }
+            
+            const ipEl = card.querySelector('.card-ip');
+            if (ipEl) {
+                if (browser.ip) {
+                    let loc = `${browser.ip}`;
+                    if (browser.city) loc += ` (${browser.city}, ${browser.country})`;
+                    ipEl.textContent = `📍 ${loc}`;
+                    ipEl.style.color = '#27c93f'; // Green when found
+                } else {
+                    ipEl.textContent = '📍 Checking location...';
+                    ipEl.style.color = '#aaa';
+                }
+            }
+
+            // Update Stats
+            const actionCountEl = card.querySelector('.action-count');
+            if (actionCountEl) actionCountEl.textContent = browser.actionCount;
+
+            const kdaEl = card.querySelector('.stat-kda');
+            if (kdaEl) kdaEl.textContent = browser.stats?.kda || '0.0';
+            
+            const intEl = card.querySelector('.stat-int');
+            if (intEl) intEl.textContent = browser.stats?.int || 0;
+
+            const profileNameEl = card.querySelector('.profile-name');
+            if (profileNameEl && browser.stats) {
+                 // Update header with Level/Class if needed
+                 profileNameEl.innerHTML = `
+                    ${browser.profile}
+                    <div style="font-size: 10px; color: #888; margin-top: 2px;">LVL ${browser.stats.level || 1} • ${browser.stats.class || 'Novice'}</div>
+                 `;
+            }
+
+            const actionEl = card.querySelector('.card-action');
+            if (actionEl) {
+                actionEl.textContent = browser.lastAction || 'Waiting...';
+            }
+        }
+
+        function updateStats() {
+            const activeCount = Object.keys(browsers).length;
+            const totalActions = Object.values(browsers).reduce((sum, b) => sum + (b.actionCount || 0), 0);
+            
+            activeCountEl.textContent = `${activeCount} Active`;
+            totalActionsEl.textContent = `${totalActions} Actions`;
+        }
+
+        function selectBrowser(instanceId) {
+            selectedBrowser = instanceId;
+            const browser = browsers[instanceId];
+            selectedProfileEl.textContent = browser.profile;
+            
+            // Show terminal
+            terminalOverlay.classList.add('visible');
+            
+            // Display logs for this browser
+            renderLogs(instanceId);
+        }
+
+        function addLog(instanceId, message, type = 'info') {
+            if (!logs[instanceId]) logs[instanceId] = [];
+            
+            logs[instanceId].push({ 
+                time: new Date().toLocaleTimeString('en-US', { hour12: false }), 
+                message, 
+                type 
+            });
+
+            // Keep only last 100 logs per browser
+            if (logs[instanceId].length > 100) {
+                logs[instanceId].shift();
+            }
+
+            // If this browser is selected, update display
+            if (selectedBrowser === instanceId) {
+                renderLogs(instanceId);
+            }
+
+            // Update last action in browser card
+            if (browsers[instanceId]) {
+                const b = browsers[instanceId];
+                b.lastAction = message.substring(0, 60);
+                b.lastActionTime = Date.now(); // Update functionality
+                updateBrowserCard(instanceId);
+                
+                // Update avatar action based on log content keywords
+                if (b.avatar) {
+                    const lowerMsg = message.toLowerCase();
+                    
+                    // 1. Actions (Persistent until changed)
+                    if (lowerMsg.includes('navig') || lowerMsg.includes('search')) {
+                        b.avatar.setAction('search');
+                    } else if (lowerMsg.includes('read') || lowerMsg.includes('extract')) {
+                        b.avatar.setAction('read');
+                    } else if (lowerMsg.includes('watch') || lowerMsg.includes('play')) {
+                        b.avatar.setAction('watch');
+                    } 
+                    // Note: We do NOT auto-reset to idle here unless explicit
+                    
+                    // 2. Moods (Happy/Bored)
+                    if (lowerMsg.includes('success') || lowerMsg.includes('completed') || lowerMsg.includes('found')) {
+                        b.avatar.setMood('happy');
+                        // Reset to neutral after 3 seconds
+                        setTimeout(() => b.avatar.setMood('neutral'), 3000);
+                    } else if (lowerMsg.includes('error') || lowerMsg.includes('fail')) {
+                         // Maybe sad? But user asked for bored. Let's keep neutral/bored.
+                         b.avatar.setMood('neutral'); 
+                    } else {
+                        // Reset to neutral on normal actions if it was bored
+                         if (b.avatar.mood === 'bored') b.avatar.setMood('neutral');
+                    }
+                }
+            }
+        }
+        
+        // Check for boredom (inactivity) every second
+        setInterval(() => {
+            const now = Date.now();
+            Object.values(browsers).forEach(b => {
+                // If no action for > 15 seconds, set mood to bored
+                if (b.lastActionTime && (now - b.lastActionTime > 15000)) {
+                    if (b.avatar && b.avatar.mood !== 'bored') {
+                        b.avatar.setMood('bored');
+                        // Also set action to idle if bored
+                        b.avatar.setAction('idle');
+                    }
+                }
+            });
+        }, 1000);
+
+        function renderLogs(instanceId) {
+            const browserLogs = logs[instanceId] || [];
+            logWindow.innerHTML = browserLogs.map(log => {
+                let colorClass = 'log-info';
+                if (log.type === 'error') colorClass = 'log-error';
+                if (log.type === 'success') colorClass = 'log-success';
+                
+                return `<div class="log-entry">
+                    <span class="log-time">[${log.time}]</span>
+                    <span class="${colorClass}">${log.message}</span>
+                </div>`;
+            }).join('');
+            
+            logWindow.scrollTop = logWindow.scrollHeight;
+        }
+
+        function closeTerminal() {
+            terminalOverlay.classList.remove('visible');
+        }
+
+        // Make terminal draggable
+        let isDragging = false;
+        const termHeader = document.querySelector('.terminal-header');
+        let startX, startY, startLeft, startTop;
+
+        termHeader.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('terminal-close')) return;
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            const rect = terminalOverlay.getBoundingClientRect();
+            startLeft = rect.left;
+            startTop = rect.top;
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            terminalOverlay.style.left = startLeft + dx + 'px';
+            terminalOverlay.style.top = startTop + dy + 'px';
+            terminalOverlay.style.bottom = 'auto';
+            terminalOverlay.style.right = 'auto';
+        });
+
+        // Check for profile in URL to auto-select
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetProfile = urlParams.get('profile');
+
+        function checkAutoSelect() {
+            if (targetProfile && !selectedBrowser) {
+                // Find instance with this profile
+                const foundId = Object.keys(browsers).find(id => browsers[id].profile === targetProfile);
+                if (foundId) {
+                    selectBrowser(foundId);
+                }
+            }
+        }
+
+        // Periodically check if we can select the target profile (as it might take time to appear)
+        if (targetProfile) {
+            const autoSelectInterval = setInterval(() => {
+                checkAutoSelect();
+                if (selectedBrowser) clearInterval(autoSelectInterval);
+            }, 500);
+            
+            // Stop trying after 30 seconds
+            setTimeout(() => clearInterval(autoSelectInterval), 30000);
+        }
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+    </script>
+</body>
+</html>
