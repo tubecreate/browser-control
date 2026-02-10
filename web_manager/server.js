@@ -21,6 +21,11 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Root Health Check
+app.get('/', (req, res) => {
+    res.send('Browser Launcher is Running');
+});
+
 // API: List Profiles
 app.get('/api/profiles', async (req, res) => {
     try {
