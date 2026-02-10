@@ -8,6 +8,7 @@
 !*.js
 !*.json
 !*.md
+!*.html
 !*.gitignore
 !LICENSE
 
