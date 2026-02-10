@@ -1,6 +1,6 @@
 /**
  * 12x12 Bit Arrays for Pixel Art
- * 1 = Ink (Color), 0 = Transparent
+ * 1 = Ink (Color), 0 = Transparent, 2 = Secondary (e.g. tongue)
  */
 
 const AVATAR_PATTERNS = {
@@ -60,20 +60,6 @@ const AVATAR_PATTERNS = {
         [0,0,0,1,1,0,0,0,0,0,0,0],
         [0,0,0,0,0,0,0,0,0,0,0,0]
     ],
-    "capybara": [
-        [0,0,0,0,0,0,0,0,0,0,0,0],
-        [0,0,0,0,0,0,0,0,0,0,0,0],
-        [0,0,1,1,1,1,1,1,1,1,0,0],
-        [0,1,1,1,1,1,1,1,1,1,1,0],
-        [0,1,1,0,1,1,1,1,1,1,1,0],
-        [0,1,1,0,1,1,1,1,1,1,1,0],
-        [0,1,1,1,1,1,1,1,1,1,1,0],
-        [0,1,1,1,0,0,0,0,0,1,1,0],
-        [0,1,1,1,1,1,1,1,1,1,1,0],
-        [0,1,1,1,1,1,1,1,1,1,1,0],
-        [0,1,1,1,1,1,1,1,1,1,1,0],
-        [0,0,1,1,1,1,1,1,1,1,0,0]
-    ],
     "turtle": [
         [0,0,0,0,0,0,0,0,0,0,0,0],
         [0,0,0,0,1,1,1,1,0,0,0,0],
@@ -132,21 +118,10 @@ const AVATAR_PATTERNS = {
     ]
 };
 
-// Colors mapping
 const COLOR_MAP = {
-    "blue": "#2196F3",
-    "red": "#F44336",
-    "green": "#4CAF50",
-    "orange": "#FF9800",
-    "purple": "#9C27B0",
-    "teal": "#009688",
-    "pink": "#E91E63",
-    "black": "#333333",
-    "white": "#FFFFFF",
-    "paper": "#EEEEEE",
-    "lens": "#81D4FA",
-    "handle": "#795548",
-    "screen": "#81C784"
+    "blue": "#2196F3", "red": "#F44336", "green": "#4CAF50", "orange": "#FF9800",
+    "purple": "#9C27B0", "teal": "#009688", "pink": "#E91E63", "black": "#333333",
+    "handle": "#795548", "lens": "#81D4FA", "paper": "#EEEEEE"
 };
 
 class PixelAvatar {
@@ -155,159 +130,168 @@ class PixelAvatar {
         this.ctx = this.canvas.getContext('2d');
         this.type = options.type || "bot";
         this.color = options.color || "blue";
-        this.scale = options.scale || 10;
+        this.scale = options.scale || 5;
         
         this.currentAction = "idle";
-        this.mood = "neutral"; // neutral, happy, bored
+        this.mood = "neutral"; 
         this.frameCounter = 0;
+        this.isWalking = false;
         
-        // Setup simple loop
+        this.lastFlairTime = 0;
+        this.currentFlair = null;
+        this.flairFrame = 0;
+        
         this.startAnimation();
     }
     
     setAvatar(type, color) {
-        if (AVATAR_PATTERNS[type]) this.type = type;
+        if (AVATAR_PATTERNS[type]) {
+            this.type = type;
+            this.currentFlair = null;
+        }
         if (color) this.color = color;
     }
     
     setAction(action) {
-        // Actions: idle, search, read, watch
         if (this.currentAction !== action) {
             this.currentAction = action;
-            this.mood = "neutral"; // Reset mood on new action usually
-            console.log(`[Avatar] Switching to action: ${action}`);
+            this.isWalking = (action === "walk" || action === "search" || action === "moving");
         }
     }
 
     setMood(mood) {
-        // Moods: neutral, happy, bored
-        if (this.mood !== mood) {
-            this.mood = mood;
-        }
+        this.mood = mood;
     }
     
     startAnimation() {
         const loop = () => {
             this.frameCounter++;
+            this.update();
             this.draw();
             requestAnimationFrame(loop);
         };
         requestAnimationFrame(loop);
     }
-    
-    draw() {
-        // Clear transparency
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        const pattern = AVATAR_PATTERNS[this.type] || AVATAR_PATTERNS["bot"];
-        const mainColor = COLOR_MAP[this.color] || COLOR_MAP["blue"];
-        
-        // Bounce effect for 'happy'
-        let yOffset = 0;
-        if (this.mood === "happy") {
-            if (this.frameCounter % 20 < 10) yOffset = -1;
+
+    update() {
+        const now = Date.now();
+        // Trigger random flair every 5-10 seconds
+        if (!this.currentFlair && this.currentAction === "idle" && now - this.lastFlairTime > 5000) {
+            if (Math.random() < 0.01) { 
+                const anims = window.AVATAR_ANIMATIONS && window.AVATAR_ANIMATIONS[this.type];
+                if (anims) {
+                    const keys = Object.keys(anims);
+                    this.currentFlair = keys[Math.floor(Math.random() * keys.length)];
+                    this.flairFrame = 0;
+                }
+            }
         }
 
-        // 1. Draw Base Avatar
+        if (this.currentFlair) {
+            if (this.frameCounter % 8 === 0) {
+                this.flairFrame++;
+                const frames = window.AVATAR_ANIMATIONS[this.type][this.currentFlair];
+                if (this.flairFrame >= frames.length * 4) { 
+                    this.currentFlair = null;
+                    this.lastFlairTime = Date.now();
+                }
+            }
+        }
+    }
+    
+    draw() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        let pattern = AVATAR_PATTERNS[this.type] || AVATAR_PATTERNS["bot"];
+        if (this.currentFlair && window.AVATAR_ANIMATIONS && window.AVATAR_ANIMATIONS[this.type]) {
+            const frames = window.AVATAR_ANIMATIONS[this.type][this.currentFlair];
+            pattern = frames[Math.floor(this.flairFrame) % frames.length];
+        }
+
+        const mainColor = this.mood === "angry" ? "#D32F2F" : (COLOR_MAP[this.color] || COLOR_MAP["blue"]);
+        
+        let yBounce = 0;
+        if (this.mood === "happy") yBounce = Math.sin(this.frameCounter / 5) * 2;
+        
+        const xOffset = this.isWalking ? Math.sin(this.frameCounter / 4) * 3 : 0;
+        const tilt = this.isWalking ? Math.sin(this.frameCounter / 4) * 0.1 : 0;
+
+        this.ctx.save();
+        this.ctx.translate(this.canvas.width/2, this.canvas.height/2);
+        this.ctx.rotate(tilt);
+        this.ctx.translate(-this.canvas.width/2 + xOffset, -this.canvas.height/2 + yBounce);
+
         for (let y = 0; y < 12; y++) {
             for (let x = 0; x < 12; x++) {
                 if (pattern[y][x] === 1) {
                     this.ctx.fillStyle = mainColor;
-                    this.ctx.fillRect(x * this.scale, (y + yOffset) * this.scale, this.scale, this.scale);
+                    this.ctx.fillRect(x * this.scale, y * this.scale, this.scale, this.scale);
+                } else if (pattern[y][x] === 2) {
+                    this.ctx.fillStyle = "#FF80AB"; 
+                    this.ctx.fillRect(x * this.scale, y * this.scale, this.scale, this.scale);
                 }
             }
         }
+        this.ctx.restore();
         
-        // 2. Draw Props based on Action
-        if (this.currentAction === "search") {
-            this.drawMagnifyingGlass();
-        } else if (this.currentAction === "read") {
-            this.drawNewspaper();
-        } else if (this.currentAction === "watch") {
-            this.drawTV();
-        }
+        if (this.currentAction === "search") this.drawMagnifyingGlass();
+        else if (this.currentAction === "read") this.drawNewspaper();
+        else if (this.currentAction === "watch") this.drawTV();
         
-        // 3. Draw Emotions / Moods
-        if (this.mood === "happy") {
-            this.drawHappyFace(yOffset);
-        } else if (this.mood === "bored") {
-            this.drawZZZ();
-        }
+        if (this.mood === "happy") this.drawHappyOverlay();
+        else if (this.mood === "angry") this.drawAngryOverlay();
+        else if (this.mood === "bored") this.drawZZZ();
     }
     
-    drawHappyFace(yOffset) {
-        // Draw simple smile overlay
-        // Only makes sense if we know where the face is. 
-        // For generic bots/animals, usually center-ish.
-        // Let's add "sparkles" or hearts instead of changing face pixels directly to be generic
-        
-        if (this.frameCounter % 30 < 15) {
-            this.ctx.fillStyle = "#FFEB3B"; // Gold/Yellow
-            // Top right sparkle
-            this.ctx.fillRect(10 * this.scale, (1 + yOffset) * this.scale, 1 * this.scale, 1 * this.scale);
-            // Top left
-            this.ctx.fillRect(1 * this.scale, (2 + yOffset) * this.scale, 1 * this.scale, 1 * this.scale);
+    drawHappyOverlay() {
+        if (this.frameCounter % 40 < 20) {
+             this.ctx.fillStyle = "#FFEB3B";
+             this.ctx.font = "12px sans-serif";
+             this.ctx.fillText("✨", 45, 15);
+             this.ctx.fillText("✨", 5, 20);
+        }
+    }
+
+    drawAngryOverlay() {
+        if (this.frameCounter % 20 < 10) {
+            this.ctx.fillStyle = "#FF5252";
+            this.ctx.font = "bold 10px sans-serif";
+            this.ctx.fillText("💢", 45, 15);
         }
     }
 
     drawZZZ() {
-        // Drifting Z's
-        this.ctx.fillStyle = "#fff";
         const step = Math.floor(this.frameCounter / 30) % 3;
-        
-        if (step >= 0) this.drawZ(10, 2);
-        if (step >= 1) this.drawZ(11, 0);
-        if (step >= 2) this.drawZ(12, -2); // Might go out of bounds?
-    }
-
-    drawZ(x, y) {
-        // Tiny 3x3 Z
-        // 111
-        // 010
-        // 111
-        // Actually fit in 1 pixel style if logical, but let's just draw simpler
-        this.ctx.fillRect(x * this.scale, y * this.scale, 2 * this.scale, 1 * this.scale); // Top
+        this.ctx.fillStyle = "#81D4FA";
+        this.ctx.font = "bold 10px sans-serif";
+        if (step >= 0) this.ctx.fillText("z", 48, 15);
+        if (step >= 1) this.ctx.fillText("Z", 52, 10);
     }
     
     drawMagnifyingGlass() {
-        // Moving glass
-        const offset = Math.sin(this.frameCounter / 10) * 2; 
-        const cx = 8 + offset; 
-        const cy = 4;
-        
-        this.ctx.fillStyle = COLOR_MAP["handle"]; 
-        this.ctx.fillRect((cx-2)*this.scale, (cy+3)*this.scale, 1*this.scale, 3*this.scale);
-        
-        this.ctx.fillStyle = "#333"; 
-        this.ctx.fillRect((cx-2)*this.scale, (cy-2)*this.scale, 4*this.scale, 4*this.scale);
-        
-        this.ctx.fillStyle = COLOR_MAP["lens"]; 
-        this.ctx.fillRect((cx-1)*this.scale, (cy-1)*this.scale, 2*this.scale, 2*this.scale);
+        const offset = Math.sin(this.frameCounter / 10) * 3;
+        const cx = 40 + offset;
+        const cy = 25;
+        this.ctx.fillStyle = COLOR_MAP["handle"];
+        this.ctx.fillRect(cx-2, cy+10, 3, 10);
+        this.ctx.fillStyle = "#333";
+        this.ctx.beginPath(); this.ctx.arc(cx, cy, 8, 0, Math.PI*2); this.ctx.fill();
+        this.ctx.fillStyle = COLOR_MAP["lens"];
+        this.ctx.beginPath(); this.ctx.arc(cx, cy, 6, 0, Math.PI*2); this.ctx.fill();
     }
     
     drawNewspaper() {
-        const top = 7;
-        const left = 2;
         this.ctx.fillStyle = COLOR_MAP["paper"];
-        this.ctx.fillRect(left*this.scale, top*this.scale, 8*this.scale, 5*this.scale);
+        this.ctx.fillRect(10, 35, 40, 25);
         this.ctx.fillStyle = "#999";
-        if (Math.floor(this.frameCounter / 20) % 2 === 0) {
-             this.ctx.fillRect((left+1)*this.scale, (top+1)*this.scale, 6*this.scale, 1*this.scale);
-             this.ctx.fillRect((left+1)*this.scale, (top+3)*this.scale, 6*this.scale, 1*this.scale);
-        } else {
-             this.ctx.fillRect((left+1)*this.scale, (top+1)*this.scale, 4*this.scale, 1*this.scale);
-             this.ctx.fillRect((left+1)*this.scale, (top+3)*this.scale, 5*this.scale, 1*this.scale);
-        }
+        for(let i=0; i<3; i++) this.ctx.fillRect(15, 40 + i*6, 30, 2);
     }
     
     drawTV() {
-        const top = 6;
-        const left = 2;
         this.ctx.fillStyle = "#444";
-        this.ctx.fillRect(left*this.scale, top*this.scale, 8*this.scale, 6*this.scale);
-        const colors = ["#81C784", "#64B5F6", "#E57373", "#FFF176"];
-        const colorIdx = Math.floor(this.frameCounter / 10) % colors.length;
-        this.ctx.fillStyle = colors[colorIdx];
-        this.ctx.fillRect((left+1)*this.scale, (top+1)*this.scale, 6*this.scale, 4*this.scale);
+        this.ctx.fillRect(10, 30, 44, 30);
+        const colors = ["#81C784", "#64B5F6", "#E57373"];
+        this.ctx.fillStyle = colors[Math.floor(this.frameCounter/10)%3];
+        this.ctx.fillRect(14, 34, 36, 22);
     }
 }
