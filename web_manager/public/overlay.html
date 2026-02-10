@@ -200,6 +200,38 @@
             try {
                 const data = JSON.parse(event.data);
                 
+                if (data.type === 'status') {
+                    // Update Agent Identity if provided
+                    if (data.agentName) {
+                        document.querySelector('.term-title').textContent = `Agent: ${data.agentName}`;
+                    }
+                    if (data.avatarType && avatar.type !== data.avatarType) {
+                        console.log(`[UI] Setting avatar type to: ${data.avatarType}`);
+                        avatar.setAvatar(data.avatarType);
+                    }
+
+                    // AI Frequency Warning
+                    if (data.aiFrequency && data.aiFrequency.level !== 'normal') {
+                        let warnEl = document.getElementById('aiFreqWarning');
+                        if (!warnEl) {
+                            warnEl = document.createElement('div');
+                            warnEl.id = 'aiFreqWarning';
+                            warnEl.style.cssText = `
+                                position: absolute; bottom: 5px; right: 5px;
+                                padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;
+                                color: #000; z-index: 1000;
+                            `;
+                            document.querySelector('.terminal-overlay').appendChild(warnEl);
+                        }
+                        warnEl.style.background = data.aiFrequency.level === 'critical' ? '#ff5f56' : '#ffbd2e';
+                        warnEl.textContent = `⚠️ AI Burst: ${data.aiFrequency.callsPerMinute}/min`;
+                        warnEl.style.display = 'block';
+                    } else {
+                        const warnEl = document.getElementById('aiFreqWarning');
+                        if (warnEl) warnEl.style.display = 'none';
+                    }
+                }
+                
                 if (data.type === 'log' || data.type === 'error') {
                     const msg = data.message;
                     addLog(msg, data.type);

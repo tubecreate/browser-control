@@ -327,7 +327,7 @@
         };
 
         function updateBrowserStatus(data) {
-            const { instanceId, profile, url, status, actionCount, lastAction, stats } = data;
+            const { instanceId, profile, url, status, actionCount, lastAction, stats, agentName, avatarType, avatarColor } = data;
             
             if (!browsers[instanceId]) {
                 if (status === 'disconnected') return; // Don't create card for dead browser
@@ -335,6 +335,9 @@
                 browsers[instanceId] = { 
                     instanceId, 
                     profile, 
+                    agentName,
+                    avatarType,
+                    avatarColor,
                     url, 
                     status, 
                     actionCount: 0, 
@@ -350,6 +353,10 @@
             }
 
             const browser = browsers[instanceId];
+            browser.agentName = agentName || browser.agentName;
+            browser.avatarType = avatarType || browser.avatarType;
+            browser.avatarColor = avatarColor || browser.avatarColor;
+            browser.aiFrequency = data.aiFrequency || browser.aiFrequency;
             browser.url = url || browser.url;
             browser.status = status || browser.status;
             browser.actionCount = actionCount !== undefined ? actionCount : browser.actionCount; // valid usage
@@ -365,6 +372,37 @@
             updateBrowserCard(instanceId);
             updateStats();
             
+            // Handle Warning / Alerts
+            const card = document.getElementById(`card-${instanceId}`);
+            if (card) {
+                const aiFreq = browser.aiFrequency;
+                const existingWarning = card.querySelector('.ai-warning-badge');
+                
+                if (aiFreq && aiFreq.level !== 'normal') {
+                    card.style.borderColor = aiFreq.level === 'critical' ? '#ff5f56' : '#ffbd2e';
+                    if (!existingWarning) {
+                        const badge = document.createElement('div');
+                        badge.className = 'ai-warning-badge';
+                        badge.style.cssText = `
+                            position: absolute; top: -10px; right: 10px;
+                            background: ${aiFreq.level === 'critical' ? '#ff5f56' : '#ffbd2e'};
+                            color: #000; font-size: 10px; font-weight: bold;
+                            padding: 2px 8px; border-radius: 10px; z-index: 10;
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+                        `;
+                        badge.textContent = `⚠️ AI: ${aiFreq.callsPerMinute}/MIN`;
+                        card.style.position = 'relative';
+                        card.appendChild(badge);
+                    } else {
+                        existingWarning.textContent = `⚠️ AI: ${aiFreq.callsPerMinute}/MIN`;
+                        existingWarning.style.background = aiFreq.level === 'critical' ? '#ff5f56' : '#ffbd2e';
+                    }
+                } else if (existingWarning) {
+                    existingWarning.remove();
+                    card.style.borderColor = (status === 'active' || status === 'browsing') ? '#27c93f' : '#333';
+                }
+            }
+
             // Handle Disconnected State
             if (status === 'disconnected') {
                 const card = document.getElementById(`card-${instanceId}`);
@@ -429,8 +467,10 @@
                     <div class="profile-info">
                         <canvas id="avatar-${instanceId}" width="48" height="48" class="avatar-mini-canvas" style="border-radius: 6px; background: #2a2a2a;"></canvas>
                         <div class="profile-name">
-                            ${browser.profile}
-                            <div style="font-size: 10px; color: #888; margin-top: 2px;">LVL ${level} • ${cls}</div>
+                            <span class="agent-name-display" style="color: #667eea; font-weight: 800; font-size: 16px;">${browser.agentName || ''}</span>
+                            <div class="profile-sub" style="font-size: 11px; font-weight: normal; color: #888; margin-top: 1px;">
+                                ${browser.profile} • LVL ${level} • ${cls}
+                            </div>
                         </div>
                     </div>
                     <div class="status-badge status-active">ACTIVE</div>
@@ -465,8 +505,8 @@
             // Wait slightly for DOM
             setTimeout(() => {
                 const avatar = new PixelAvatar(`avatar-${instanceId}`, {
-                    type: type,
-                    color: color,
+                    type: browser.avatarType || type,
+                    color: browser.avatarColor || color,
                     scale: 4
                 });
                 browsers[instanceId].avatar = avatar;
@@ -508,12 +548,24 @@
             if (intEl) intEl.textContent = browser.stats?.int || 0;
 
             const profileNameEl = card.querySelector('.profile-name');
-            if (profileNameEl && browser.stats) {
-                 // Update header with Level/Class if needed
-                 profileNameEl.innerHTML = `
-                    ${browser.profile}
-                    <div style="font-size: 10px; color: #888; margin-top: 2px;">LVL ${browser.stats.level || 1} • ${browser.stats.class || 'Novice'}</div>
-                 `;
+            if (profileNameEl && browser.agentName) {
+                const agentDisplay = profileNameEl.querySelector('.agent-name-display');
+                if (agentDisplay) agentDisplay.textContent = browser.agentName;
+                
+                const subDisplay = profileNameEl.querySelector('.profile-sub');
+                if (subDisplay) {
+                    subDisplay.textContent = `${browser.profile} • LVL ${browser.stats?.level || 1} • ${browser.stats?.class || 'Novice'}`;
+                }
+            }
+
+            // Update Avatar if identity changed
+            if (browser.avatar && (browser.avatar.type !== browser.avatarType || browser.avatar.color !== browser.avatarColor)) {
+                 if (browser.avatarType) browser.avatar.setAvatar(browser.avatarType);
+                 if (browser.avatarColor) {
+                      browser.avatar.base_color = browser.avatarColor;
+                      browser.avatar.resolved_color = browser.avatar.color_map[browser.avatarColor] || browser.avatarColor;
+                      browser.avatar.render();
+                 }
             }
 
             const actionEl = card.querySelector('.card-action');
