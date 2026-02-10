@@ -677,11 +677,14 @@ CRITICAL RULES:
   }
 
   getStatus() {
+    const elapsedMs = this.getElapsedTime();
     return {
       sessionId: this.sessionId,
-      elapsedMs: this.getElapsedTime(),
+      elapsedMs: elapsedMs,
+      elapsedMinutes: Math.floor(elapsedMs / 60000),
       actionsCompleted: this.actionHistory.length,
-      currentUrl: this.currentContext.url
+      currentUrl: this.currentContext.url,
+      pageType: this.currentContext.pageType
     };
   }
 
