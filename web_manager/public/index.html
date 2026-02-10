@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Profile Manager</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f4f6f8; }
+        h1 { color: #333; display: flex; align-items: center; justify-content: space-between; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; }
+        th { background: #f9f9f9; color: #666; font-weight: 600; }
+        button { cursor: pointer; padding: 8px 12px; border: none; border-radius: 4px; font-weight: 500; transition: all 0.2s; }
+        .btn-launch { background: #4CAF50; color: white; }
+        .btn-launch:hover { background: #45a049; }
+        .btn-cookies { background: #2196F3; color: white; margin-left: 5px; }
+        .btn-cookies:hover { background: #1976D2; }
+        .btn-config { background: #607D8B; color: white; margin-left: 5px; }
+        .btn-config:hover { background: #546E7A; }
+        .btn-new { background: #673AB7; color: white; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 8px; width: 400px; }
+        input[type="text"], textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .status-msg { margin-top: 10px; padding: 10px; border-radius: 4px; display: none; }
+        .success { background: #e8f5e9; color: #2e7d32; }
+        .error { background: #ffebee; color: #c62828; }
+        .loading { opacity: 0.6; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <h1>
+        Browser Profiles
+        <div>
+            <button class="btn-config" onclick="window.open('/overlay.html', 'Overlay', 'width=300,height=150,top=50,left=1500')">👁️ Open Overlay</button>
+            <button class="btn-new" onclick="openModal('newProfileModal')">+ New Profile</button>
+        </div>
+    </h1>
+
+    <div class="card">
+        <div id="status" class="status-msg"></div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Profile Name</th>
+                    <th>Last Modified</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="profileList">
+                <tr><td colspan="3">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- New Profile Modal -->
+    <div id="newProfileModal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Profile</h2>
+            <input type="text" id="newProfileName" placeholder="Enter profile name">
+            <div class="actions">
+                <button onclick="closeModal()">Cancel</button>
+                <button class="btn-new" onclick="createProfile()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Config Modal -->
+    <div id="configModal" class="modal">
+        <div class="modal-content">
+            <h2 id="configTitle">Configure Profile</h2>
+            
+            <label><strong>Operating System:</strong></label>
+            <select id="configOS" style="width: 100%; padding: 8px; margin: 5px 0 15px;">
+                <option value="Microsoft Windows">Microsoft Windows</option>
+                <option value="Apple Mac">Apple Mac</option>
+                <option value="Linux">Linux</option>
+                <option value="Android">Android</option>
+                <option value="iOS">iOS</option>
+            </select>
+
+            <label><strong>Browser:</strong></label>
+            <select id="configBrowser" style="width: 100%; padding: 8px; margin: 5px 0 15px;">
+                <option value="Chrome">Chrome</option>
+                <option value="Firefox">Firefox</option>
+                <option value="Edge">Edge</option>
+                <option value="Safari">Safari</option>
+            <select id="configBrowser" style="width: 100%; padding: 8px; margin: 5px 0 15px;">
+                <option value="Chrome">Chrome</option>
+                <option value="Firefox">Firefox</option>
+                <option value="Edge">Edge</option>
+                <option value="Safari">Safari</option>
+            </select>
+
+            <label><strong>Proxy (e.g. socks5://user:pass@host:port):</strong></label>
+            <input type="text" id="configProxy" placeholder="Enter proxy URL or leave empty">
+
+            <label><strong>Notes:</strong></label>
+            <textarea id="configNotes" rows="3" placeholder="Add notes here..."></textarea>
+
+            <div class="actions">
+                <button onclick="closeModal()">Cancel</button>
+                <button class="btn-new" onclick="saveConfig()">Save & Reset Fingerprint</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+        let currentProfileName = '';
+
+        async function loadProfiles() {
+            try {
+                const res = await fetch(`${API_URL}/profiles`);
+                const profiles = await res.json();
+                
+                const tbody = document.getElementById('profileList');
+                tbody.innerHTML = '';
+
+                profiles.forEach(p => {
+                    const tr = document.createElement('tr');
+                    const date = new Date(p.lastModified).toLocaleString();
+                    tr.innerHTML = `
+                        <td><strong>${p.name}</strong></td>
+                        <td>${date}</td>
+                        <td>
+                            <button class="btn-launch" onclick="launchProfile('${p.name}')">Launch</button>
+                            <button class="btn-config" onclick="openConfig('${p.name}')">⚙️ Config</button>
+                            <button class="btn-cookies" onclick="exportCookies('${p.name}')">Export Cookies</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                showStatus('Failed to load profiles: ' + err.message, 'error');
+            }
+        }
+
+        async function launchProfile(name) {
+            showStatus(`Launching ${name}...`, 'success');
+            try {
+                await fetch(`${API_URL}/launch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profile: name })
+                });
+            } catch (err) {
+                showStatus('Launch failed', 'error');
+            }
+        }
+
+        async function openConfig(name) {
+            currentProfileName = name;
+            document.getElementById('configTitle').innerText = 'Configure: ' + name;
+            
+            try {
+                const res = await fetch(`${API_URL}/profile-config/${name}`);
+                const config = await res.json();
+                
+                // Set form values
+                const tags = config.tags || ['Microsoft Windows', 'Chrome'];
+                document.getElementById('configOS').value = tags.find(t => ['Microsoft Windows', 'Apple Mac', 'Linux', 'Android', 'iOS'].includes(t)) || 'Microsoft Windows';
+                document.getElementById('configBrowser').value = tags.find(t => ['Chrome', 'Firefox', 'Edge', 'Safari'].includes(t)) || 'Chrome';
+                document.getElementById('configNotes').value = config.notes || '';
+                document.getElementById('configProxy').value = config.proxy || '';
+                
+                openModal('configModal');
+            } catch (err) {
+                showStatus('Failed to load config', 'error');
+            }
+        }
+
+        async function saveConfig() {
+            const os = document.getElementById('configOS').value;
+            const browser = document.getElementById('configBrowser').value;
+            const notes = document.getElementById('configNotes').value;
+            const proxy = document.getElementById('configProxy').value;
+            const tags = [os, browser];
+
+            try {
+                const res = await fetch(`${API_URL}/profile-config/${currentProfileName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        tags, 
+                        notes,
+                        proxy,
+                        resetFingerprint: true // Always reset fingerprint on config change to apply new tags
+                    })
+                });
+
+                if (res.ok) {
+                    closeModal();
+                    showStatus('Configuration saved! Fingerprint will resolve on next launch.', 'success');
+                } else {
+                    showStatus('Failed to save config', 'error');
+                }
+            } catch (err) {
+                showStatus('Error saving config: ' + err.message, 'error');
+            }
+        }
+
+        async function exportCookies(name) {
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = 'Extracting...';
+            btn.classList.add('loading');
+
+            try {
+                const res = await fetch(`${API_URL}/cookies/${name}`);
+                if (!res.ok) throw new Error('Export failed');
+                
+                const cookies = await res.json();
+                await navigator.clipboard.writeText(JSON.stringify(cookies, null, 2));
+                
+                showStatus(`Copied ${cookies.length} cookies from ${name} to clipboard!`, 'success');
+            } catch (err) {
+                showStatus('Failed to export cookies: ' + err.message, 'error');
+            } finally {
+                btn.innerText = originalText;
+                btn.classList.remove('loading');
+            }
+        }
+
+        async function createProfile() {
+            const name = document.getElementById('newProfileName').value;
+            if (!name) return;
+
+            try {
+                const res = await fetch(`${API_URL}/profiles`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                
+                if (res.ok) {
+                    closeModal();
+                    loadProfiles();
+                    showStatus('Profile created!', 'success');
+                } else {
+                    const data = await res.json();
+                    alert(data.error);
+                }
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        function openModal(id) { 
+            const el = id ? document.getElementById(id) : document.getElementById('newProfileModal');
+            el.style.display = 'flex'; 
+        }
+        function closeModal() { 
+            document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); 
+        }
+        
+        function showStatus(msg, type) {
+            const el = document.getElementById('status');
+            el.innerText = msg;
+            el.className = 'status-msg ' + type;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 5000);
+        }
+
+        // Init
+        loadProfiles();
+    </script>
+</body>
+</html>
