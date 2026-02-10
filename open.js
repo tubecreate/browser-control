@@ -17,6 +17,8 @@ import { SessionManager } from './session_manager.js';
 import { BrowserManager } from './browser_manager.js';
 import axios from 'axios';
 
+let agentContext = null;
+
 // Helper: Report Status to Web Manager
 async function reportStatus(args, data) {
     if (!args['instance-id']) return;
@@ -24,6 +26,9 @@ async function reportStatus(args, data) {
         await axios.post('http://localhost:3000/api/browser-status', {
             instanceId: args['instance-id'],
             profile: args.profile,
+            agentName: data.agentName || (typeof agentContext !== 'undefined' && agentContext?.agent_name),
+            avatarType: data.avatarType || (typeof agentContext !== 'undefined' && agentContext?.avatar_type),
+            avatarColor: data.avatarColor || (typeof agentContext !== 'undefined' && agentContext?.avatar_color),
             ...data
         });
     } catch (e) {
@@ -106,15 +111,12 @@ async function main() {
   let proxy = proxyArg;
 
   // --- Load Agent Context EARLY ---
-  let agentContext = null;
   if (args['context-file']) {
     try {
-        if (await fs.pathExists(args['context-file'])) {
-            agentContext = await fs.readJson(args['context-file']);
-            console.log(`[Launch] Loaded agent context for: ${agentContext.agent_name}`);
-        }
+        agentContext = await fs.readJson(args['context-file']);
+        console.log(`[Session] Agent Context loaded: ${agentContext.agent_name}`);
     } catch (e) {
-        console.error('[Launch] Failed to load context file:', e.message);
+        console.error('[Session] Failed to load context file:', e.message);
     }
   }
   
@@ -527,10 +529,14 @@ async function main() {
                 body: JSON.stringify({ 
                   instanceId,
                   profile: profileName,
+                  agentName: agentContext?.agent_name,
+                  avatarType: agentContext?.avatar_type,
+                  avatarColor: agentContext?.avatar_color,
                   url: currentUrl,
                   status: session.currentContext?.pageType || 'browsing',
                   actionCount: status.actionsCompleted,
                   lastAction: `${status.elapsedMinutes}/${minSessionMinutes} min`,
+                  aiFrequency: session.getCallFrequencyStatus(),
                   stats: stats // Include RPG stats
                 })
               });
@@ -616,7 +622,7 @@ async function main() {
               if (actionFn) {
                 try {
                   await actionFn(page, { ...nextAction.params, isRetry });
-                  session.recordAction(nextAction.action, nextAction.params);
+                  session.recordAction(nextAction.action, nextAction.params, 'success');
                   
                   // Update RPG Stats
                   const updatedStats = await browserManager.updateStats(profileName, nextAction.action, {
@@ -634,11 +640,12 @@ async function main() {
                     const browseFn = ACTION_REGISTRY['browse'];
                     if (browseFn) {
                       await browseFn(page, { iterations: 10 });
-                      session.recordAction('browse', { iterations: 10, note: 'fallback from watch' });
+                      session.recordAction('browse', { iterations: 10, note: 'fallback from watch' }, 'success');
                       await browserManager.updateStats(profileName, 'browse');
                     }
                   } else {
                     console.warn(`[Session] Action error: ${actionError.message}. Skipping remaining chain.`);
+                    session.recordAction(nextAction.action, nextAction.params, 'error', actionError.message);
                     break; // Stop current chain on error
                   }
                 }

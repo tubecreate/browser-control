@@ -27,6 +27,8 @@ export class SessionManager {
     this.gpuUsageHistory = []; // Track last 1 minute of GPU usage
     this.MAX_GPU_HISTORY = 12; // 12 samples @ 5s interval = 1 minute
     this.stats = null; // RPG Stats
+    this.failedElements = new Set(); // Track elements that failed to be interacted with
+    this.aiCallHistory = []; // Track timestamps of AI calls for frequency warning
   }
 
   /**
@@ -67,14 +69,16 @@ export class SessionManager {
   /**
    * Record a completed action to history
    */
-  recordAction(action, params = {}) {
+  recordAction(action, params = {}, status = 'success', errorMsg = null) {
     this.actionHistory.push({
       action,
       params,
+      status,
+      error: errorMsg,
       url: this.currentContext.url,
       timestamp: Date.now()
     });
-    console.log(`[SessionManager] Recorded action: ${action}`);
+    console.log(`[SessionManager] Recorded action: ${action} (${status})`);
   }
 
   /**
@@ -109,6 +113,10 @@ export class SessionManager {
     
     try {
       const urlObj = new URL(url);
+      if (this.currentContext.domain && this.currentContext.domain !== urlObj.hostname) {
+          console.log(`[SessionManager] Domain changed from ${this.currentContext.domain} to ${urlObj.hostname}. Clearing failure cache.`);
+          this.failedElements.clear();
+      }
       this.currentContext.domain = urlObj.hostname;
       
       // Detect page type based on domain
@@ -133,6 +141,26 @@ export class SessionManager {
    */
   updateStats(stats) {
     this.stats = stats;
+  }
+
+  /**
+   * Check AI call frequency
+   * Returns { level: 'normal'|'high'|'critical', callsPerMinute: float }
+   */
+  getCallFrequencyStatus() {
+      const now = Date.now();
+      const oneMinAgo = now - 60000;
+      const callsLastMinute = this.aiCallHistory.filter(t => t > oneMinAgo).length;
+      
+      let level = 'normal';
+      if (callsLastMinute > 10) level = 'critical';
+      else if (callsLastMinute > 5) level = 'high';
+      
+      return { 
+          level, 
+          callsPerMinute: callsLastMinute,
+          warning: level !== 'normal' ? `Warning: High AI usage detected (${callsLastMinute} calls/min)` : null
+      };
   }
 
   /**
@@ -348,7 +376,7 @@ export class SessionManager {
       hasVideo: pageContent?.hasVideo || false,
       hasSearchBox: pageContent?.hasSearchBox || false,
       remainingMinutes,
-      recentHistory: this.actionHistory.slice(-3).map(a => `${a.action} on ${a.url}`)
+      recentHistory: this.actionHistory.slice(-5).map(a => `${a.action} on ${a.url} -> ${a.status}${a.error ? ` (Error: ${a.error})` : ''}`)
     };
 
     // Build Prompt
@@ -356,6 +384,13 @@ export class SessionManager {
 
     try {
       console.log(`[SessionManager] Requesting SKELETON from AI model: ${this.aiModel}...`);
+      
+      // Record call for frequency tracking
+      this.aiCallHistory.push(Date.now());
+      // Keep only last 5 minutes of history
+      const fiveMinsAgo = Date.now() - (5 * 60 * 1000);
+      this.aiCallHistory = this.aiCallHistory.filter(t => t > fiveMinsAgo);
+
       const response = await axios.post(this.aiUrl, {
         model: this.aiModel,
         messages: [{ role: "user", content: prompt }],
@@ -499,6 +534,17 @@ export class SessionManager {
           let bestEl = null;
           let bestScore = -1;
           
+          // Debugging log for history awareness
+          if (this.actionHistory.length > 0) {
+              const last = this.actionHistory[this.actionHistory.length - 1];
+              if (last.status === 'error') {
+                  console.log(`[Grounding] Last action failed (${last.error}). Filtering problematic elements.`);
+                  if (last.params && last.params.text) {
+                      this.failedElements.add(last.params.text);
+                  }
+              }
+          }
+          
           const lowerCriteria = criteria.toLowerCase();
           const queryTerms = lowerCriteria.split(' ').filter(t => t.length > 3);
 
@@ -537,6 +583,11 @@ export class SessionManager {
               // F. Specific Element Boosting
               if (action === 'click_result' && (text.includes('youtube') || text.includes('video'))) score += 15;
               if (el.href && !el.href.includes('google.com')) score += 20; // Prefer external content links
+
+              // G. Failure Penalization
+              if (this.failedElements.has(el.text)) {
+                  score -= 150; // Heavy penalty for previously failed elements
+              }
 
               if (score > bestScore && score > 0) {
                   bestScore = score;
