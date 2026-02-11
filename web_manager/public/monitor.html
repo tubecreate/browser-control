@@ -432,9 +432,10 @@
             // Update Avatar Action based on status
             if (browser.avatar) {
                 const lowerStatus = (status || '').toLowerCase();
-                if (lowerStatus.includes('search')) browser.avatar.setAction('search');
-                else if (lowerStatus.includes('read') || lowerStatus.includes('extract')) browser.avatar.setAction('read');
-                else if (lowerStatus.includes('watch') || lowerStatus.includes('play')) browser.avatar.setAction('watch');
+                if (lowerStatus.includes('search') || lowerStatus.includes('tìm kiếm')) browser.avatar.setAction('searching');
+                else if (lowerStatus.includes('read') || lowerStatus.includes('đọc') || lowerStatus.includes('extract') || lowerStatus.includes('trích xuất')) browser.avatar.setAction('reading');
+                else if (lowerStatus.includes('watch') || lowerStatus.includes('xem') || lowerStatus.includes('play')) browser.avatar.setAction('watching');
+                else if (lowerStatus.includes('moving') || lowerStatus.includes('di chuyển') || lowerStatus.includes('browse')) browser.avatar.setAction('moving');
                 else browser.avatar.setAction('idle');
             }
         }
@@ -561,12 +562,8 @@
 
             // Update Avatar if identity changed
             if (browser.avatar && (browser.avatar.type !== browser.avatarType || browser.avatar.color !== browser.avatarColor)) {
-                 if (browser.avatarType) browser.avatar.setAvatar(browser.avatarType);
-                 if (browser.avatarColor) {
-                      browser.avatar.base_color = browser.avatarColor;
-                      browser.avatar.resolved_color = browser.avatar.color_map[browser.avatarColor] || browser.avatarColor;
-                      browser.avatar.render();
-                 }
+                 browser.avatar.setAvatar(browser.avatarType, browser.avatarColor);
+                 browser.avatar.render();
             }
 
             const actionEl = card.querySelector('.card-action');
