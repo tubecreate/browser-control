@@ -283,19 +283,19 @@ async function main() {
           try {
               const fingerprintData = await fs.readFile(fingerprintPath, 'utf8');
               if (fingerprintData && fingerprintData.length > 20) {
-                  // Ensure fingerprint is parsed if it's a JSON string
-                  fingerprint = browserManager.safeParseFingerprint(fingerprintData);
-                  // Verify parsed result is not null or "bad quality"
-                  if (!fingerprint || (typeof fingerprint === 'object' && Object.keys(fingerprint).length < 5)) {
-                      throw new Error("Invalid or too small fingerprint object");
+                  // Parse fingerprint if it's a JSON string
+                  try {
+                      fingerprint = typeof fingerprintData === 'string' ? JSON.parse(fingerprintData) : fingerprintData;
+                  } catch (e) {
+                      fingerprint = fingerprintData; // Use as-is if not JSON
                   }
-                  console.log(`Fingerprint loaded successfully (Size: ${Math.round(fingerprintData.length/1024)} KB, Type: ${typeof fingerprint})`);
+                  console.log('Fingerprint loaded successfully.');
               } else {
                   console.warn('Fingerprint file too small, will re-fetch');
                   fingerprint = null;
               }
           } catch (e) {
-              console.error(`Failed to parse saved fingerprint JSON: ${e.message}`);
+              console.error(`Failed to load fingerprint: ${e.message}`);
               fingerprint = null;
           }
       } 
@@ -303,8 +303,7 @@ async function main() {
       if (!fingerprint) {
           console.log('Fetching fingerprint via BrowserManager...');
           try {
-              const fpRaw = await browserManager.getFingerprint(profileName);
-              fingerprint = browserManager.safeParseFingerprint(fpRaw);
+              fingerprint = await browserManager.getFingerprint(profileName);
           } catch (e) {
               console.error(`Failed to get fingerprint: ${e.message}`);
               // Fallback?
