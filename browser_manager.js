@@ -45,54 +45,47 @@ export class BrowserManager {
         const fingerprintPath = path.join(profilePath, 'fingerprint.json');
         const configPath = path.join(profilePath, 'config.json');
 
+        let fingerprint;
+
         // 1. Try to load existing
         if (await fs.pathExists(fingerprintPath)) {
             console.log('Loading saved fingerprint...');
             try {
                 const data = await fs.readFile(fingerprintPath, 'utf8');
-                if (data && data.length > 20) {
-                     // Check if it's a token or JSON
-                     console.log(`Fingerprint loaded successfully (Size: ${Math.round(data.length / 1024)} KB)`);
-                     return data; // Return raw string (could be token or JSON)
+                fingerprint = JSON.parse(data);
+                if (!fingerprint || typeof fingerprint !== 'object' || Object.keys(fingerprint).length < 10) {
+                     throw new Error('Invalid fingerprint');
                 }
+                console.log(`Fingerprint loaded successfully.`);
+                return fingerprint;
             } catch (e) {
-                console.warn('Failed to load saved fingerprint, fetching new one:', e.message);
+                console.warn('Failed to parse saved fingerprint, fetching new one:', e.message);
+                // Fall through to fetch
             }
         }
 
         // 2. Fetch new
         let tags = options.tags || ['Microsoft Windows', 'Chrome'];
+        
+        // Try to read tags from config if not provided in options
         if (!options.tags && await fs.pathExists(configPath)) {
              try {
                  const config = await fs.readJson(configPath);
-                 if (config.tags && Array.isArray(config.tags)) tags = config.tags;
+                 if (config.tags && Array.isArray(config.tags)) {
+                     tags = config.tags;
+                 }
              } catch (e) {}
         }
 
         console.log(`Fetching NEW Fingerprint with tags: ${JSON.stringify(tags)}`);
-        
+        // Retry logic for fetching
         let attempts = 0;
         while (attempts < 3) {
             try {
-                const fingerprint = await plugin.fetch({ tags });
-                
-                // Inspect result
-                console.log(`[DEBUG] Fetched fingerprint type: ${typeof fingerprint}`);
-                if (fingerprint && typeof fingerprint === 'object') {
-                    console.log(`[DEBUG] Fingerprint keys: ${Object.keys(fingerprint).join(', ')}`);
-                    if (fingerprint.id) {
-                        console.log(`[DEBUG] Fingerprint has ID: ${fingerprint.id}`);
-                        // Prioritize the ID (token) for saving as it's more stable
-                        await fs.outputFile(fingerprintPath, fingerprint.id, 'utf8');
-                        return fingerprint.id;
-                    }
-                }
-
-                // Fallback: stringify the whole thing if no ID
-                const fpStr = typeof fingerprint === 'string' ? fingerprint : JSON.stringify(fingerprint);
-                console.log(`[DEBUG] Saving full fingerprint data (${Math.round(fpStr.length/1024)} KB)`);
-                await fs.outputFile(fingerprintPath, fpStr, 'utf8');
-                return fpStr;
+                fingerprint = await plugin.fetch({ tags });
+                // Save it
+                await fs.outputFile(fingerprintPath, JSON.stringify(fingerprint), 'utf8');
+                return fingerprint;
             } catch (e) {
                 console.error(`Fingerprint fetch attempt ${attempts + 1} failed: ${e.message}`);
                 attempts++;
@@ -130,36 +123,9 @@ export class BrowserManager {
             });
         } else {
             console.log('No proxy configured. Clearing proxy settings.');
-            plugin.useProxy(null);
+            // Directly unset the proxy property to ensure no proxy is sent to the engine
+            plugin.proxy = null;
         }
-    }
-
-    safeParseFingerprint(fpData) {
-        if (!fpData) return null;
-        
-        // If it's already an object, return it (but log for debug)
-        if (typeof fpData === 'object') {
-            console.log(`[SafeParse] Already an object. Keys: ${Object.keys(fpData).slice(0, 5).join(', ')}...`);
-            return fpData;
-        }
-        
-        const trimmed = String(fpData).trim();
-        
-        // If it starts with '{' it's likely JSON
-        if (trimmed.startsWith('{')) {
-            try {
-                const parsed = JSON.parse(trimmed);
-                console.log(`[SafeParse] Successfully parsed JSON string. Keys: ${Object.keys(parsed).slice(0, 5).join(', ')}...`);
-                return parsed;
-            } catch (e) {
-                console.warn(`[SafeParse] String starts with '{' but JSON.parse failed: ${e.message}`);
-                // Fall through to return raw string
-            }
-        } else {
-            console.log(`[SafeParse] Data does not look like JSON (starts with ${trimmed.substring(0, 5)}). Treating as Token.`);
-        }
-        
-        return fpData;
     }
 
     async launch(profileName, options = {}) {
@@ -208,79 +174,39 @@ export class BrowserManager {
              let fpAttempts = 0;
              while (fpAttempts < 2) {
                  try {
-                    let fpToUse = fingerprint;
-                    
-                    // DEBUG: Inspect the fingerprint
-                    if (typeof fingerprint === 'string') {
-                        console.log(`[DEBUG] Fingerprint is STRING. First 100 chars: ${fingerprint.substring(0, 100)}`);
-                    } else if (typeof fingerprint === 'object') {
-                        console.log(`[DEBUG] Fingerprint is OBJECT. Keys: ${Object.keys(fingerprint).slice(0, 10).join(', ')}`);
-                        if (fingerprint.id) console.log(`[DEBUG] Found ID: ${fingerprint.id}`);
-                        if (fingerprint.token) console.log(`[DEBUG] Found Token: ${fingerprint.token}`);
-                        if (fingerprint.fingerprint) console.log(`[DEBUG] Has nested 'fingerprint' property (Size of nested: ${JSON.stringify(fingerprint.fingerprint).length})`);
-                    }
-
-                    // Attempt 1: Try as-is (but ensure it's processed if object)
-                    if (typeof fingerprint === 'object') {
-                        if (fingerprint.id) {
-                            fpToUse = fingerprint.id;
-                        } else if (fingerprint.token) {
-                            fpToUse = fingerprint.token;
-                        } else if (!fingerprint.fingerprint) {
-                            // If it's raw data without a wrapper, try wrapping it
-                            console.log('[DEBUG] Raw fingerprint data detected. Wrapping in { fingerprint: ... }');
-                            fpToUse = { fingerprint: fingerprint };
-                        }
-                    }
-                    
-                    console.log(`[DEBUG] useFingerprint: type=${typeof fpToUse}, length=${(typeof fpToUse === 'string' ? fpToUse.length : JSON.stringify(fpToUse).length)}`);
-                    
-                    try {
-                        plugin.useFingerprint(fpToUse);
-                        console.log('[DEBUG] useFingerprint: SUCCESS');
-                    } catch (innerError) {
-                        console.warn(`[DEBUG] useFingerprint failed with ${typeof fpToUse}: ${innerError.message}. Trying stringified fallback...`);
-                        const stringified = typeof fpToUse === 'string' ? fpToUse : JSON.stringify(fpToUse);
-                        plugin.useFingerprint(stringified);
-                        console.log('[DEBUG] useFingerprint (stringified fallback): SUCCESS');
-                    }
-                    
-                    break; // Success
-                } catch (e) {
-                    console.error(`Error applying fingerprint (Attempt ${fpAttempts + 1}/2):`, e.message);
-                    if (fpAttempts === 0) {
-                        console.warn('Fingerprint might be corrupted. Deleting and re-fetching...');
-                        try {
-                            const fingerprintPath = path.join(profilePath, 'fingerprint.json');
-                            await fs.remove(fingerprintPath);
-                            // Fetch new one
-                            fingerprint = await this.getFingerprint(profileName, { tags: ['Microsoft Windows', 'Chrome'] });
-                        } catch (err) {
-                            console.error('Failed to refresh fingerprint:', err.message);
-                        }
+                    // plugin.useFingerprint accepts either the fingerprint object or the token string
+                    if (fingerprint) {
+                        plugin.useFingerprint(fingerprint);
+                        break; // Success
                     } else {
-                        throw e; // Fail on second attempt
+                        throw new Error('Fingerprint is empty');
                     }
-                    fpAttempts++;
-                }
+                 } catch (e) {
+                     console.error(`Error applying fingerprint (Attempt ${fpAttempts + 1}/2):`, e.message);
+                     if (fpAttempts === 0) {
+                         console.warn('Fingerprint might be corrupted. Deleting and re-fetching...');
+                         try {
+                             const fingerprintPath = path.join(profilePath, 'fingerprint.json');
+                             await fs.remove(fingerprintPath);
+                             // Fetch new one
+                             fingerprint = await this.getFingerprint(profileName, { tags: ['Microsoft Windows', 'Chrome'] });
+                         } catch (err) {
+                             console.error('Failed to refresh fingerprint:', err.message);
+                         }
+                     } else {
+                         throw e; // Fail on second attempt
+                     }
+                     fpAttempts++;
+                 }
              }
         }
 
         // Apply proxy (already normalized if it came from args, or loaded from config)
-        console.log(`[DEBUG] applyProxy: proxy=${proxy}`);
-        try {
-            this.applyProxy(proxy);
-            console.log('[DEBUG] applyProxy: SUCCESS');
-        } catch (e) {
-            console.error(`[DEBUG] applyProxy FAILED: ${e.message}`);
-            throw e;
-        }
+        this.applyProxy(proxy);
 
         // Default args
         const launchArgs = [
             '--start-maximized',
-            '--ignore-certificate-errors',
-            '--ignore-ssl-errors',
             ...args
         ];
 
@@ -298,18 +224,14 @@ export class BrowserManager {
 
         while (launchAttempt <= maxLaunchAttempts) {
             try {
-                console.log(`[DEBUG] launchPersistentContext attempt ${launchAttempt}...`);
                 const context = await plugin.launchPersistentContext(profilePath, {
                     headless,
                     args: launchArgs,
-                    userDataDir: profilePath,
-                    ignoreHTTPSErrors: true
+                    userDataDir: profilePath
                 });
-                console.log('[DEBUG] launchPersistentContext: SUCCESS');
                 return context;
             } catch (e) {
                 lastError = e;
-                console.error(`[DEBUG] launchPersistentContext FAILED: ${e.message}`);
                 if (e.message.toLowerCase().includes('failed to get proxy ip') || 
                     e.message.toLowerCase().includes('proxy') ||
                     e.message.toLowerCase().includes('timeout')) {
