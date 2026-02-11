@@ -210,11 +210,9 @@ export class BrowserManager {
                  try {
                     // Ensure fingerprint is parsed if it's a JSON string
                     const parsedFp = this.safeParseFingerprint(fingerprint);
-                    // Always pass a string to useFingerprint
-                    const fpToUse = typeof parsedFp === 'object' ? JSON.stringify(parsedFp) : parsedFp;
                     
-                    console.log(`[DEBUG] useFingerprint: type=${typeof fpToUse}, length=${fpToUse.length}`);
-                    plugin.useFingerprint(fpToUse);
+                    console.log(`[DEBUG] useFingerprint: type=${typeof parsedFp}, length=${(typeof parsedFp === 'string' ? parsedFp.length : JSON.stringify(parsedFp).length)}`);
+                    plugin.useFingerprint(parsedFp);
                     console.log('[DEBUG] useFingerprint: SUCCESS');
                     break; // Success
                 } catch (e) {
