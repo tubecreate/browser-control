@@ -208,11 +208,28 @@ export class BrowserManager {
              let fpAttempts = 0;
              while (fpAttempts < 2) {
                  try {
-                    // Ensure fingerprint is parsed if it's a JSON string
-                    const parsedFp = this.safeParseFingerprint(fingerprint);
+                    let fpToUse = fingerprint;
                     
-                    console.log(`[DEBUG] useFingerprint: type=${typeof parsedFp}, length=${(typeof parsedFp === 'string' ? parsedFp.length : JSON.stringify(parsedFp).length)}`);
-                    plugin.useFingerprint(parsedFp);
+                    // If it's an object, try to extract token or stringify
+                    if (typeof fingerprint === 'object') {
+                        if (fingerprint.id) {
+                            fpToUse = fingerprint.id;
+                            console.log(`[DEBUG] Extracted ID from fingerprint object: ${fpToUse}`);
+                        } else if (fingerprint.token) {
+                            fpToUse = fingerprint.token;
+                            console.log(`[DEBUG] Extracted Token from fingerprint object: ${fpToUse}`);
+                        } else {
+                            fpToUse = JSON.stringify(fingerprint);
+                        }
+                    }
+                    
+                    // Final safety: ensure it's a string for useFingerprint
+                    if (typeof fpToUse !== 'string') {
+                        fpToUse = String(fpToUse);
+                    }
+                    
+                    console.log(`[DEBUG] useFingerprint: type=${typeof fpToUse}, length=${fpToUse.length}`);
+                    plugin.useFingerprint(fpToUse);
                     console.log('[DEBUG] useFingerprint: SUCCESS');
                     break; // Success
                 } catch (e) {
