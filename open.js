@@ -125,13 +125,15 @@ async function main() {
     console.log(`[InstanceID] ${instanceId}`);
   }
 
-  // --- Handle Dynamic Proxy if config missing ---
-  if (!proxy && agentContext && agentContext.proxy_provider && agentContext.proxy_provider.mode === 'dynamic') {
-      console.log('[Launch] Proxy arg missing but Dynamic Mode detected. Fetching CURRENT proxy...');
+  // --- Always fetch fresh proxy when Dynamic Mode is configured ---
+  if (agentContext && agentContext.proxy_provider && agentContext.proxy_provider.mode === 'dynamic') {
+      console.log('[Launch] Dynamic proxy mode detected. Fetching fresh proxy...');
       const fetchedProxy = await fetchProxyFromProvider(agentContext.proxy_provider);
       if (fetchedProxy) {
-          console.log(`[Launch] Using current proxy: ${fetchedProxy}`);
+          console.log(`[Launch] Using fresh proxy: ${fetchedProxy}`);
           proxy = fetchedProxy;
+      } else if (!proxy) {
+          console.warn('[Launch] Could not fetch proxy and no fallback available.');
       }
   }
 
@@ -278,50 +280,65 @@ async function main() {
 
       if (await fs.pathExists(fingerprintPath)) {
           console.log('Loading saved fingerprint...');
-          const fingerprintData = await fs.readFile(fingerprintPath, 'utf8');
           try {
-              fingerprint = JSON.parse(fingerprintData);
-              if (!fingerprint || typeof fingerprint !== 'object' || Object.keys(fingerprint).length < 10) {
-                  throw new Error('Invalid or too small fingerprint object');
+              const fingerprintData = await fs.readFile(fingerprintPath, 'utf8');
+              if (fingerprintData && fingerprintData.length > 20) {
+                  // Ensure fingerprint is parsed if it's a JSON string
+                  fingerprint = browserManager.safeParseFingerprint(fingerprintData);
+                  // Verify parsed result is not null or "bad quality"
+                  if (!fingerprint || (typeof fingerprint === 'object' && Object.keys(fingerprint).length < 5)) {
+                      throw new Error("Invalid or too small fingerprint object");
+                  }
+                  console.log(`Fingerprint loaded successfully (Size: ${Math.round(fingerprintData.length/1024)} KB, Type: ${typeof fingerprint})`);
+              } else {
+                  console.warn('Fingerprint file too small, will re-fetch');
+                  fingerprint = null;
               }
-              console.log(`Fingerprint loaded successfully (Size: ${Math.round(fingerprintData.length/1024)} KB)`);
           } catch (e) {
-              console.warn('Failed to parse saved fingerprint JSON:', e.message);
-              fingerprint = null; // Force fetch
+              console.error(`Failed to parse saved fingerprint JSON: ${e.message}`);
+              fingerprint = null;
           }
       } 
       
       if (!fingerprint) {
-          // Determine tags: CLI > Config > Default
-          let tags = ['Microsoft Windows', 'Chrome'];
-          
-          if (cliTags) {
-              tags = cliTags.split(',').map(t => t.trim());
-          } else if (await fs.pathExists(configPath)) {
-              const config = await fs.readJson(configPath);
-              if (config.tags && Array.isArray(config.tags)) {
-                  tags = config.tags;
-              }
+          console.log('Fetching fingerprint via BrowserManager...');
+          try {
+              const fpRaw = await browserManager.getFingerprint(profileName);
+              fingerprint = browserManager.safeParseFingerprint(fpRaw);
+          } catch (e) {
+              console.error(`Failed to get fingerprint: ${e.message}`);
+              // Fallback?
+              fingerprint = await plugin.fetch({ tags: ['Microsoft Windows', 'Chrome'] });
           }
-          
-          console.log(`Fetching NEW Fingerprint with tags: ${JSON.stringify(tags)}`);
-          fingerprint = await plugin.fetch({ tags });
-          
-          // Save for future use
-          await fs.ensureDir(profilePath);
-          await fs.outputFile(fingerprintPath, JSON.stringify(fingerprint), 'utf8');
       }
 
       console.log('Launching browser...');
       const finalHeadless = isHeadless || !!exportCookies;
+
+      const launchArgs = [
+          '--remote-debugging-port=0' // Force random port
+      ];
+
+      // Check for Mobile Fingerprint to resize window
+      if (fingerprint) {
+          let ua = "";
+          if (typeof fingerprint === 'object' && fingerprint.navigator && fingerprint.navigator.userAgent) {
+              ua = fingerprint.navigator.userAgent.toLowerCase();
+          } else if (typeof fingerprint === 'string') {
+              ua = fingerprint.toLowerCase();
+          }
+
+          if (ua.includes('android') || ua.includes('iphone') || ua.includes('ipad')) {
+              console.log('[Launch] Mobile fingerprint detected. Setting small window size.');
+              launchArgs.push('--window-size=450,900');
+          }
+      }
       
       context = await browserManager.launch(profileName, {
           headless: finalHeadless,
           fingerprint,
           proxy,
-          args: [
-              '--remote-debugging-port=0' // Force random port
-          ]
+          args: launchArgs
       });
 
       // Ensure a page exists immediately
@@ -741,6 +758,23 @@ async function main() {
         attempt++;
       } else if (error.message === 'FINGERPRINT_RETRY' && attempt < maxAttempts) {
         console.error('\n>>> Retrying with fresh fingerprint...');
+        attempt++;
+      } else if ((error.message.includes('Failed to get proxy ip') ||
+                  error.message.includes('Failed to launch browser') ||
+                  error.message.includes('Incorrect format')) && attempt < maxAttempts) {
+        // Proxy is dead/expired - try to fetch a fresh one from dynamic provider
+        console.error(`\n>>> Proxy error: ${error.message}. Trying to refresh proxy...`);
+        if (agentContext && agentContext.proxy_provider && agentContext.proxy_provider.mode === 'dynamic') {
+            const freshProxy = await fetchProxyFromProvider(agentContext.proxy_provider);
+            if (freshProxy) {
+                console.log(`[ProxyRefresh] Got fresh proxy: ${freshProxy}`);
+                proxy = freshProxy;
+            } else {
+                console.warn('[ProxyRefresh] Could not get fresh proxy. Retrying with no proxy...');
+                proxy = null;
+            }
+        }
+        try { if (context) await context.close(); } catch (e) {}
         attempt++;
       } else if ((error.message.includes('Page crashed') || 
                   error.message.includes('Target page, context or browser has been closed') || 
