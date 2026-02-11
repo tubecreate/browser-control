@@ -210,27 +210,41 @@ export class BrowserManager {
                  try {
                     let fpToUse = fingerprint;
                     
-                    // If it's an object, try to extract token or stringify
+                    // DEBUG: Inspect the fingerprint
+                    if (typeof fingerprint === 'string') {
+                        console.log(`[DEBUG] Fingerprint is STRING. First 100 chars: ${fingerprint.substring(0, 100)}`);
+                    } else if (typeof fingerprint === 'object') {
+                        console.log(`[DEBUG] Fingerprint is OBJECT. Keys: ${Object.keys(fingerprint).slice(0, 10).join(', ')}`);
+                        if (fingerprint.id) console.log(`[DEBUG] Found ID: ${fingerprint.id}`);
+                        if (fingerprint.token) console.log(`[DEBUG] Found Token: ${fingerprint.token}`);
+                        if (fingerprint.fingerprint) console.log(`[DEBUG] Has nested 'fingerprint' property (Size of nested: ${JSON.stringify(fingerprint.fingerprint).length})`);
+                    }
+
+                    // Attempt 1: Try as-is (but ensure it's processed if object)
                     if (typeof fingerprint === 'object') {
                         if (fingerprint.id) {
                             fpToUse = fingerprint.id;
-                            console.log(`[DEBUG] Extracted ID from fingerprint object: ${fpToUse}`);
                         } else if (fingerprint.token) {
                             fpToUse = fingerprint.token;
-                            console.log(`[DEBUG] Extracted Token from fingerprint object: ${fpToUse}`);
-                        } else {
-                            fpToUse = JSON.stringify(fingerprint);
+                        } else if (!fingerprint.fingerprint) {
+                            // If it's raw data without a wrapper, try wrapping it
+                            console.log('[DEBUG] Raw fingerprint data detected. Wrapping in { fingerprint: ... }');
+                            fpToUse = { fingerprint: fingerprint };
                         }
                     }
                     
-                    // Final safety: ensure it's a string for useFingerprint
-                    if (typeof fpToUse !== 'string') {
-                        fpToUse = String(fpToUse);
+                    console.log(`[DEBUG] useFingerprint: type=${typeof fpToUse}, length=${(typeof fpToUse === 'string' ? fpToUse.length : JSON.stringify(fpToUse).length)}`);
+                    
+                    try {
+                        plugin.useFingerprint(fpToUse);
+                        console.log('[DEBUG] useFingerprint: SUCCESS');
+                    } catch (innerError) {
+                        console.warn(`[DEBUG] useFingerprint failed with ${typeof fpToUse}: ${innerError.message}. Trying stringified fallback...`);
+                        const stringified = typeof fpToUse === 'string' ? fpToUse : JSON.stringify(fpToUse);
+                        plugin.useFingerprint(stringified);
+                        console.log('[DEBUG] useFingerprint (stringified fallback): SUCCESS');
                     }
                     
-                    console.log(`[DEBUG] useFingerprint: type=${typeof fpToUse}, length=${fpToUse.length}`);
-                    plugin.useFingerprint(fpToUse);
-                    console.log('[DEBUG] useFingerprint: SUCCESS');
                     break; // Success
                 } catch (e) {
                     console.error(`Error applying fingerprint (Attempt ${fpAttempts + 1}/2):`, e.message);
