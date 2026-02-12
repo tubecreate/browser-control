@@ -278,9 +278,11 @@ app.get('/api/profile-config/:name', async (req, res) => {
             return res.status(404).json({ error: 'Profile not found' });
         }
 
-        let config = { tags: ['Microsoft Windows', 'Chrome'], notes: '' };
+        let config = { tags: ['Microsoft Windows', 'Chrome'], notes: '', blacklist: [] };
         if (await fs.pathExists(configPath)) {
             config = await fs.readJson(configPath);
+            // Ensure blacklist exists in old configs
+            if (!config.blacklist) config.blacklist = [];
         }
         res.json(config);
     } catch (err) {
@@ -292,7 +294,7 @@ app.get('/api/profile-config/:name', async (req, res) => {
 app.post('/api/profile-config/:name', async (req, res) => {
     try {
         const { name } = req.params;
-        const { tags, notes, proxy, resetFingerprint } = req.body;
+        const { tags, notes, proxy, resetFingerprint, blacklist } = req.body;
         
         const profilePath = path.join(PROFILES_DIR, name);
         const configPath = path.join(profilePath, 'config.json');
@@ -304,7 +306,8 @@ app.post('/api/profile-config/:name', async (req, res) => {
         const config = { 
             tags: tags || ['Microsoft Windows', 'Chrome'], 
             notes: notes || '',
-            proxy: proxy || ''
+            proxy: proxy || '',
+            blacklist: blacklist || []
         };
         
         await fs.writeJson(configPath, config, { spaces: 2 });
@@ -315,6 +318,40 @@ app.post('/api/profile-config/:name', async (req, res) => {
                 await fs.remove(fingerprintPath);
             }
         }
+        
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+// API: Get Global Settings
+app.get('/api/global-settings', async (req, res) => {
+    try {
+        const settingsPath = path.join(PROJECT_ROOT, 'data', 'global_settings.json');
+        
+        let settings = { blacklist: [], maxVisitsPerWeek: 3 };
+        if (await fs.pathExists(settingsPath)) {
+            settings = await fs.readJson(settingsPath);
+        }
+        res.json(settings);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Save Global Settings
+app.post('/api/global-settings', async (req, res) => {
+    try {
+        const { blacklist, maxVisitsPerWeek } = req.body;
+        const settingsPath = path.join(PROJECT_ROOT, 'data', 'global_settings.json');
+        
+        await fs.ensureDir(path.join(PROJECT_ROOT, 'data'));
+        await fs.writeJson(settingsPath, { 
+            blacklist: blacklist || [], 
+            maxVisitsPerWeek: maxVisitsPerWeek || 3 
+        }, { spaces: 2 });
         
         res.json({ success: true });
     } catch (err) {
