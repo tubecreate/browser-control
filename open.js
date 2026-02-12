@@ -606,9 +606,40 @@ async function main() {
             const pageContent = await session.scanPageContent(page);
             
             if (pageContent.isErrorPage) {
-                console.log('\n[Session] ❌ Network error page detected (Vietnamese or English).');
-                console.log('[Session] Waiting 30 seconds before rotating proxy and restarting...');
-                await page.waitForTimeout(30000);
+                console.log('\n[Session] ❌ Network error page detected.');
+                
+                // Step 1: Try reloading the current page
+                console.log('[Session] Step 1: Reloading page...');
+                try {
+                    await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
+                    await page.waitForTimeout(3000);
+                    const afterReload = await session.scanPageContent(page);
+                    if (!afterReload.isErrorPage) {
+                        console.log('[Session] ✅ Page recovered after reload!');
+                        continue; // Resume session loop
+                    }
+                } catch (e) {
+                    console.warn('[Session] Reload failed:', e.message);
+                }
+                
+                // Step 2: Try navigating to Google
+                console.log('[Session] Step 2: Navigating to Google...');
+                try {
+                    await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded', timeout: 15000 });
+                    await page.waitForTimeout(3000);
+                    const afterGoogle = await session.scanPageContent(page);
+                    if (!afterGoogle.isErrorPage) {
+                        console.log('[Session] ✅ Google loaded. Resuming session from Google.');
+                        session.updateContext(page.url());
+                        continue; // Resume session loop
+                    }
+                } catch (e) {
+                    console.warn('[Session] Google navigation failed:', e.message);
+                }
+                
+                // Step 3: Rotate proxy (last resort)
+                console.log('[Session] Step 3: All recovery failed. Rotating proxy...');
+                await page.waitForTimeout(5000);
                 throw new Error('BROWSER_CRASHED'); // Force rotation by crashing to outer loop
             }
             

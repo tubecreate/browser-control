@@ -303,12 +303,23 @@ async loadBlacklist() {
         // Error Detection
         const isErrorPage = 
           bodyText.includes("This site can't be reached") ||
+          bodyText.includes("This page isn't working") ||
           bodyText.includes("Không thể truy cập trang web này") ||
+          bodyText.includes("Trang này không hoạt động") ||
+          bodyText.includes("Không có kết nối Internet") ||
           bodyText.includes("ERR_NAME_NOT_RESOLVED") ||
           bodyText.includes("ERR_CONNECTION_TIMED_OUT") ||
           bodyText.includes("ERR_CONNECTION_CLOSED") ||
+          bodyText.includes("ERR_CONNECTION_REFUSED") ||
+          bodyText.includes("ERR_CONNECTION_RESET") ||
           bodyText.includes("ERR_PROXY_CONNECTION_FAILED") ||
+          bodyText.includes("ERR_TUNNEL_CONNECTION_FAILED") ||
+          bodyText.includes("ERR_SSL_PROTOCOL_ERROR") ||
+          bodyText.includes("ERR_SSL_VERSION_OR_CIPHER_MISMATCH") ||
+          bodyText.includes("ERR_CERT") ||
           bodyText.includes("DNS_PROBE_FINISHED_NXDOMAIN") ||
+          bodyText.includes("DNS_PROBE_FINISHED_NO_INTERNET") ||
+          bodyText.includes("Windows Network Diagnostics") ||
           bodyText.includes("500 Internal Server Error") ||
           bodyText.includes("404 Not Found");
           
@@ -728,25 +739,9 @@ async loadBlacklist() {
                   score -= 150; // Heavy penalty for previously failed elements
               }
 
-              // H. NEW: Blacklist Filtering
-              if (el.href && this.isBlacklisted(el.href)) {
-                  console.log(`[Grounding] Blacklisted URL: ${el.href}`);
-                  score -= 200; // Heavy penalty for blacklisted links
-              }
               
-              // I. NEW: Frequency Filtering (Weekly limit)
-              if (el.href) {
-                  try {
-                      const url = new URL(el.href);
-                      const domain = url.hostname;
-                      const visitCount = this.domainAccessHistory[domain]?.length || 0;
-                      
-                      if (visitCount > this.maxVisitsPerWeek) {
-                          console.log(`[Grounding] Frequent domain: ${domain} (${visitCount} visits this week)`);
-                          score -= 100; // Penalty for frequently visited domains
-                      }
-                  } catch (e) {}
-              }
+              
+              
 
               if (score > bestScore && score > 0) {
                   bestScore = score;
