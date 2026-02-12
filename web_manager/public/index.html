@@ -34,7 +34,7 @@
     <h1>
         Browser Profiles
         <div>
-            <button class="btn-config" onclick="window.open('/overlay.html', 'Overlay', 'width=300,height=150,top=50,left=1500')">👁️ Open Overlay</button>
+            <button class="btn-config" onclick="openGlobalSettings()">⚙️ Global Settings</button>
             <button class="btn-new" onclick="openModal('newProfileModal')">+ New Profile</button>
         </div>
     </h1>
@@ -103,6 +103,27 @@
             <div class="actions">
                 <button onclick="closeModal()">Cancel</button>
                 <button class="btn-new" onclick="saveConfig()">Save & Reset Fingerprint</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Settings Modal -->
+    <div id="globalSettingsModal" class="modal">
+        <div class="modal-content">
+            <h2>Global Settings</h2>
+            
+            <label><strong>Blacklist (one domain/keyword per line):</strong></label>
+            <textarea id="globalBlacklist" rows="8" placeholder="e.g.\nads.google.com\ndoubleclick.net\nadvertising"></textarea>
+            
+            <label><strong>Max Visits Per Week (same domain):</strong></label>
+            <input type="number" id="globalMaxVisits" min="1" max="50" value="3" style="width: 100%; padding: 10px;">
+
+            <label><strong>Max Visits Per Day (same domain):</strong></label>
+            <input type="number" id="globalMaxVisitsPerDay" min="1" max="50" value="1" style="width: 100%; padding: 10px;">
+            
+            <div class="actions">
+                <button onclick="closeModal()">Cancel</button>
+                <button class="btn-new" onclick="saveGlobalSettings()">Save Settings</button>
             </div>
         </div>
     </div>
@@ -187,7 +208,7 @@
                         tags, 
                         notes,
                         proxy,
-                        resetFingerprint: true // Always reset fingerprint on config change to apply new tags
+                        resetFingerprint: true
                     })
                 });
 
@@ -263,6 +284,49 @@
             el.style.display = 'block';
             setTimeout(() => el.style.display = 'none', 5000);
         }
+        // Global Settings Functions
+        async function openGlobalSettings() {
+            try {
+                const res = await fetch(`${API_URL}/global-settings`);
+                const settings = await res.json();
+                
+                document.getElementById('globalBlacklist').value = (settings.blacklist || []).join('\n');
+                document.getElementById('globalMaxVisits').value = settings.maxVisitsPerWeek || 3;
+                document.getElementById('globalMaxVisitsPerDay').value = settings.maxVisitsPerDay || 1;
+                
+                openModal('globalSettingsModal');
+            } catch (err) {
+                showStatus('Failed to load global settings', 'error');
+            }
+        }
+
+        async function saveGlobalSettings() {
+            const blacklist = document.getElementById('globalBlacklist').value
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0);
+            const maxVisitsPerWeek = parseInt(document.getElementById('globalMaxVisits').value) || 3;
+            const maxVisitsPerDay = parseInt(document.getElementById('globalMaxVisitsPerDay').value) || 1;
+
+            try {
+                const res = await fetch(`${API_URL}/global-settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ blacklist, maxVisitsPerWeek, maxVisitsPerDay })
+                });
+
+                if (res.ok) {
+                    closeModal();
+                    showStatus('Global settings saved!', 'success');
+                } else {
+                    showStatus('Failed to save global settings', 'error');
+                }
+            } catch (err) {
+                showStatus('Error saving global settings: ' + err.message, 'error');
+            }
+        }
+
+
 
         // Init
         loadProfiles();

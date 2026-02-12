@@ -500,7 +500,7 @@ async function main() {
             }
         }
 
-        const session = new SessionManager(minSessionMinutes, userGoal, aiModel, agentContext);
+        const session = new SessionManager(minSessionMinutes, userGoal, aiModel, agentContext, args.profile || 'default');
         
         // Initial Stat Load for AI context
         try {

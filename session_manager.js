@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { getGpuUsage } from './gpu_monitor.js';
+import fs from 'fs-extra';
+import path from 'path';
 
 /**
  * Session Manager for Generative Browser Sessions
@@ -7,7 +9,7 @@ import { getGpuUsage } from './gpu_monitor.js';
  */
 
 export class SessionManager {
-  constructor(minDurationMinutes = 10, userGoal = null, aiModel = 'qwen:latest', agentContext = null) {
+  constructor(minDurationMinutes = 10, userGoal = null, aiModel = 'qwen:latest', agentContext = null, profileName = 'default') {
     this.minDurationMs = minDurationMinutes * 60 * 1000;
     this.sessionId = null;
     this.startTime = null;
@@ -20,6 +22,16 @@ export class SessionManager {
     this.userGoal = userGoal;
     this.aiModel = aiModel;
     this.agentContext = agentContext; // NEW: Store agent context (interests, routine)
+    this.profileName = profileName; // NEW: Profile name for loading blacklist
+    this.blacklist = []; // NEW: Website blacklist
+    
+    this.maxVisitsPerWeek = 3;
+    this.maxVisitsPerDay = 1; // NEW: Daily limit
+    this.domainAccessHistory = {}; 
+    
+    // Load history per profile
+    this.loadHistory().catch(e => console.warn('[SessionManager] Failed to load history:', e.message));
+    
     this.aiUrl = 'http://localhost:5295/api/v1/localai/chat/completions';
     this.lastRefuelTime = 0;
     this.REFUEL_COOLDOWN_MS = 120000;
@@ -29,6 +41,9 @@ export class SessionManager {
     this.stats = null; // RPG Stats
     this.failedElements = new Set(); // Track elements that failed to be interacted with
     this.aiCallHistory = []; // Track timestamps of AI calls for frequency warning
+    
+    // Load blacklist from profile config
+    this.loadBlacklist().catch(e => console.warn('[SessionManager] Failed to load blacklist:', e.message));
   }
 
   /**
@@ -183,6 +198,97 @@ export class SessionManager {
     }
     console.log('[SessionManager] Reset stuck counter');
   }
+  /**
+   * Load blacklist from profile config
+   */
+  
+  async loadHistory() {
+    if (!this.profileName) return;
+    try {
+      const historyPath = path.resolve('./profiles', this.profileName, 'history.json');
+      if (await fs.pathExists(historyPath)) {
+        const data = await fs.readJson(historyPath);
+        this.domainAccessHistory = data.domainAccessHistory || {};
+        // console.log(`[SessionManager] Loaded history for profile ${this.profileName}`);
+      }
+    } catch (e) {
+      console.warn('[SessionManager] Failed to load history:', e.message);
+    }
+  }
+
+  async saveHistory() {
+    if (!this.profileName) return;
+    try {
+      const profileDir = path.resolve('./profiles', this.profileName);
+      await fs.ensureDir(profileDir);
+      const historyPath = path.join(profileDir, 'history.json');
+      await fs.writeJson(historyPath, { domainAccessHistory: this.domainAccessHistory }, { spaces: 2 });
+    } catch (e) {
+      console.warn('[SessionManager] Failed to save history:', e.message);
+    }
+  }
+
+async loadBlacklist() {
+    try {
+      const settingsPath = path.resolve('./data/global_settings.json');
+      
+      if (await fs.pathExists(settingsPath)) {
+        const settings = await fs.readJson(settingsPath);
+        this.blacklist = settings.blacklist || [];
+        this.maxVisitsPerWeek = settings.maxVisitsPerWeek || 3;
+        this.maxVisitsPerDay = settings.maxVisitsPerDay || 1;
+        console.log(`[SessionManager] Loaded ${this.blacklist.length} blacklist patterns, maxVisits: ${this.maxVisitsPerWeek}`);
+      }
+    } catch (e) {
+      console.warn('[SessionManager] Failed to load global settings:', e.message);
+    }
+  }
+
+  /**
+   * Check if a URL/domain matches blacklist patterns
+   */
+  isBlacklisted(url) {
+    if (!url || this.blacklist.length === 0) return false;
+    
+    const lowerUrl = url.toLowerCase();
+    return this.blacklist.some(pattern => {
+      const lowerPattern = pattern.toLowerCase();
+      return lowerUrl.includes(lowerPattern);
+    });
+  }
+
+  /**
+   * Track domain access and return visit count for current week
+   */
+  trackDomainAccess(domain) {
+    if (!domain) return { day: 0, week: 0 };
+    
+    const now = Date.now();
+    const oneDayAgo = now - (24 * 60 * 60 * 1000);
+    const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+    
+    // Initialize if needed
+    if (!this.domainAccessHistory[domain]) {
+      this.domainAccessHistory[domain] = [];
+    }
+    
+    // Clean old visits (> 1 week)
+    this.domainAccessHistory[domain] = this.domainAccessHistory[domain].filter(t => t > oneWeekAgo);
+    
+    // Add current visit
+    this.domainAccessHistory[domain].push(now);
+    
+    // Calculate counts
+    const weekCount = this.domainAccessHistory[domain].length;
+    const dayCount = this.domainAccessHistory[domain].filter(t => t > oneDayAgo).length;
+    
+    // Persist
+    this.saveHistory().catch(e => console.error(e));
+    
+    return { day: dayCount, week: weekCount };
+  }
+
+
 
   /**
    * Scan page content to detect available elements (DYNAMIC - not domain-based)
@@ -549,6 +655,39 @@ export class SessionManager {
           const queryTerms = lowerCriteria.split(' ').filter(t => t.length > 3);
 
           for (const el of elements) {
+              // STRICT PRE-FILTERING
+              if (el.href) {
+                  // 1. Blacklist Check
+                  if (this.isBlacklisted(el.href)) {
+                      // console.log(`[Grounding] Skipped blacklisted: ${el.href}`);
+                      continue; // SKIP COMPLETELY
+                  }
+                  
+                  // 2. Frequency Check
+                  try {
+                       const url = new URL(el.href);
+                       const domain = url.hostname;
+                       const history = this.domainAccessHistory[domain] || [];
+                       
+                       const now = Date.now();
+                       const oneDayAgo = now - (24 * 60 * 60 * 1000);
+                       const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+                       
+                       const weekVisits = history.filter(t => t > oneWeekAgo).length;
+                       const dayVisits = history.filter(t => t > oneDayAgo).length;
+                       
+                       if (weekVisits >= this.maxVisitsPerWeek) {
+                           // console.log(`[Grounding] Skipped (Max Week): ${domain}`);
+                           continue; // SKIP COMPLETELY
+                       }
+                       
+                       if (dayVisits >= this.maxVisitsPerDay) {
+                           // console.log(`[Grounding] Skipped (Max Day): ${domain}`);
+                           continue; // SKIP COMPLETELY
+                       }
+                  } catch(e) {}
+              }
+
               const text = el.text.toLowerCase();
               let score = 0;
 
@@ -587,6 +726,26 @@ export class SessionManager {
               // G. Failure Penalization
               if (this.failedElements.has(el.text)) {
                   score -= 150; // Heavy penalty for previously failed elements
+              }
+
+              // H. NEW: Blacklist Filtering
+              if (el.href && this.isBlacklisted(el.href)) {
+                  console.log(`[Grounding] Blacklisted URL: ${el.href}`);
+                  score -= 200; // Heavy penalty for blacklisted links
+              }
+              
+              // I. NEW: Frequency Filtering (Weekly limit)
+              if (el.href) {
+                  try {
+                      const url = new URL(el.href);
+                      const domain = url.hostname;
+                      const visitCount = this.domainAccessHistory[domain]?.length || 0;
+                      
+                      if (visitCount > this.maxVisitsPerWeek) {
+                          console.log(`[Grounding] Frequent domain: ${domain} (${visitCount} visits this week)`);
+                          score -= 100; // Penalty for frequently visited domains
+                      }
+                  } catch (e) {}
               }
 
               if (score > bestScore && score > 0) {
