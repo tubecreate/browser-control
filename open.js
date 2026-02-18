@@ -108,6 +108,7 @@ async function main() {
   const cliTags = args['tags']; // Raw CLI arg for overrides
   const instanceId = args['instance-id'] || null; // Instance ID from BrowserProcessManager
   const proxyArg = args['proxy'] || ''; // CLI override
+  const skipProxyCheck = args['skip-proxy-check'] || false;
   let proxy = proxyArg;
 
   // --- Load Agent Context EARLY ---
@@ -337,7 +338,8 @@ async function main() {
           headless: finalHeadless,
           fingerprint,
           proxy,
-          args: launchArgs
+          args: launchArgs,
+          skipProxyCheck // Pass the flag
       });
 
       // Ensure a page exists immediately
@@ -514,7 +516,19 @@ async function main() {
         // Navigate to a starter page if on about:blank to give the session context
         if (page.url() === 'about:blank') {
            console.log('[Session] Starting from blank page. Navigating to Google...');
-           await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded' });
+           const MAX_RETRIES = 3;
+           for (let i = 0; i < MAX_RETRIES; i++) {
+               try {
+                   if (i > 0) console.log(`[Session] Retry attempt ${i+1}/${MAX_RETRIES} for initial navigation...`);
+                   await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
+                   break;
+               } catch (e) {
+                   console.warn(`[Session] Initial navigation failed: ${e.message}`);
+                   if (i === MAX_RETRIES - 1) throw e; // Propagate last error to trigger browser restart
+                   console.log('[Session] Waiting 5s before retry...');
+                   await page.waitForTimeout(5000);
+               }
+           }
         }
 
         session.start(page.url(), userGoal, actionSequence);
@@ -814,6 +828,7 @@ async function main() {
                   error.message.includes('ERR_TUNNEL_CONNECTION_FAILED') ||
                   error.message.includes('ERR_CONNECTION_RESET') ||
                   error.message.includes('ERR_NAME_NOT_RESOLVED') ||
+                  error.message.includes('ERR_SSL_PROTOCOL_ERROR') ||
                   error.message.includes('ERR_CONNECTION_CLOSED')) && attempt < maxAttempts) {
         console.error(`\n>>> Browser Crash/Network Error detected: ${error.message}. Retrying...`);
         attempt++;

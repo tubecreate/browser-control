@@ -27,16 +27,27 @@ export async function navigate(page, params) {
       targetUrl = `https://${targetUrl}`;
   }
 
-  try {
-    console.log(`[NAVIGATE] Going to: ${targetUrl}...`);
-    // Wait for networkidle to ensure heavy SPA apps like Grok/Twitter/Gmail are actually usable
-    await page.goto(targetUrl, { waitUntil: 'load', timeout: 60000 });
-    await page.waitForLoadState('networkidle').catch(() => console.log('[NAVIGATE] Network not idle, but continuing...'));
-  } catch (err) {
-    console.error(`[NAVIGATE] Failed to go to ${targetUrl}: ${err.message}`);
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
-    console.log(`[NAVIGATE] Falling back to search: ${searchUrl}`);
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
+  const MAX_RETRIES = 3;
+  for (let i = 0; i < MAX_RETRIES; i++) {
+      try {
+        console.log(`[NAVIGATE] Attempt ${i + 1}/${MAX_RETRIES}: Going to ${targetUrl}...`);
+        await page.goto(targetUrl, { waitUntil: 'load', timeout: 60000 });
+        await page.waitForLoadState('networkidle').catch(() => console.log('[NAVIGATE] Network not idle, but continuing...'));
+        break; // Success
+      } catch (err) {
+        console.error(`[NAVIGATE] Failed attempt ${i + 1}: ${err.message}`);
+        
+        if (i === MAX_RETRIES - 1) {
+             // Final attempt failed, fallback to search
+             console.log(`[NAVIGATE] All retry attempts failed. Falling back to search...`);
+             const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+             await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
+        } else {
+             // Wait before retry
+             console.log(`[NAVIGATE] Retrying in 5 seconds...`);
+             await page.waitForTimeout(5000);
+        }
+      }
   }
   
   // Wait for a bit more to be sure

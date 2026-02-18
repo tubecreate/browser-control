@@ -232,6 +232,19 @@ export class BrowserManager {
                 return context;
             } catch (e) {
                 lastError = e;
+                if (options.skipProxyCheck && (
+                    e.message.toLowerCase().includes('failed to get proxy ip') || 
+                    e.message.toLowerCase().includes('proxy') ||
+                    e.message.toLowerCase().includes('timeout')
+                )) {
+                    console.warn(`[Launch] Proxy failed (${e.message}) but skipProxyCheck is enabled. Disabling proxy and retrying...`);
+                    this.applyProxy(null); // Disable proxy in plugin
+                    options.proxy = null; // Update options to reflect change
+                    // No sleep, retry immediately
+                    launchAttempt++;
+                    continue;
+                }
+
                 if (e.message.toLowerCase().includes('failed to get proxy ip') || 
                     e.message.toLowerCase().includes('proxy') ||
                     e.message.toLowerCase().includes('timeout')) {

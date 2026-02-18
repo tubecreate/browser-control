@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Profile Manager</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background: #f4f6f8; }
+        h1 { color: #333; display: flex; align-items: center; justify-content: space-between; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; }
+        th { background: #f9f9f9; color: #666; font-weight: 600; }
+        button { cursor: pointer; padding: 8px 12px; border: none; border-radius: 4px; font-weight: 500; transition: all 0.2s; }
+        .btn-launch { background: #4CAF50; color: white; }
+        .btn-launch:hover { background: #45a049; }
+        .btn-cookies { background: #2196F3; color: white; margin-left: 5px; }
+        .btn-cookies:hover { background: #1976D2; }
+        .btn-config { background: #607D8B; color: white; margin-left: 5px; }
+        .btn-config:hover { background: #546E7A; }
+        .btn-new { background: #673AB7; color: white; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 8px; width: 400px; }
+        input[type="text"], textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .status-msg { margin-top: 10px; padding: 10px; border-radius: 4px; display: none; }
+        .success { background: #e8f5e9; color: #2e7d32; }
+        .error { background: #ffebee; color: #c62828; }
+        .loading { opacity: 0.6; pointer-events: none; }
+        
+        /* Added styles for bulk actions */
+        .bulk-actions {
+            display: none;
+            background: #e3f2fd;
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid #90caf9;
+        }
+        .bulk-actions.visible { display: flex; }
+        .bulk-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        .btn-delete { background: #d32f2f; color: white; }
+        .btn-delete:hover { background: #c62828; }
+        .btn-proxy { background: #1976D2; color: white; }
+        .btn-proxy:hover { background: #1565C0; }
+        
+        /* Updated table styles */
+        th.checkbox-col, td.checkbox-col { width: 40px; text-align: center; }
+        input[type="checkbox"] { cursor: pointer; transform: scale(1.2); }
+    </style>
+</head>
+<body>
+
+    <h1>
+        Browser Profiles
+        <div>
+            <button class="btn-config" onclick="window.location.href='/'" style="background: #333;">📺 Monitor</button>
+            <button class="btn-config" onclick="openGlobalSettings()">⚙️ Global Settings</button>
+            <button class="btn-new" onclick="openModal('newProfileModal')">+ New Profile</button>
+        </div>
+    </h1>
+
+    <!-- Bulk Actions Bar -->
+    <div id="bulkActions" class="bulk-actions">
+        <span><strong id="selectedCount">0</strong> profiles selected</span>
+        <div>
+            <button class="bulk-btn btn-proxy" onclick="openBulkProxyModal()">Set Proxy</button>
+            <button class="bulk-btn btn-delete" onclick="bulkDelete()">Delete Selected</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div id="status" class="status-msg"></div>
+        <table>
+            <thead>
+                <tr>
+                    <th class="checkbox-col"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
+                    <th>Profile Name</th>
+                    <th>Created Date</th>
+                    <th>Last Modified</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="profileList">
+                <tr><td colspan="3">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- New Profile Modal -->
+    <div id="newProfileModal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Profile</h2>
+            <input type="text" id="newProfileName" placeholder="Enter profile name">
+            <div class="actions">
+                <button onclick="closeModal()">Cancel</button>
+                <button class="btn-new" onclick="createProfile()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Config Modal -->
+    <div id="configModal" class="modal">
+        <div class="modal-content">
+            <h2 id="configTitle">Configure Profile</h2>
+            
+            <label><strong>Operating System:</strong></label>
+            <select id="configOS" style="width: 100%; padding: 8px; margin: 5px 0 15px;">
+                <option value="Microsoft Windows">Microsoft Windows</option>
+                <option value="Apple Mac">Apple Mac</option>
+                <option value="Linux">Linux</option>
+                <option value="Android">Android</option>
+                <option value="iOS">iOS</option>
+            </select>
+
+            <label><strong>Browser:</strong></label>
+            <select id="configBrowser" style="width: 100%; padding: 8px; margin: 5px 0 15px;">
+                <option value="Chrome">Chrome</option>
+                <option value="Firefox">Firefox</option>
+                <option value="Edge">Edge</option>
+                <option value="Safari">Safari</option>
+            </select>
+
+            <label><strong>Proxy (e.g. socks5://user:pass@host:port):</strong></label>
+            <input type="text" id="configProxy" placeholder="Enter proxy URL or leave empty">
+
+            <label><strong>Notes:</strong></label>
+            <textarea id="configNotes" rows="3" placeholder="Add notes here..."></textarea>
+
+            <div class="actions">
+                <button onclick="closeModal()">Cancel</button>
+                <button class="btn-new" onclick="saveConfig()">Save & Reset Fingerprint</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Proxy Modal -->
+    <div id="bulkProxyModal" class="modal">
+        <div class="modal-content">
+            <h2>Bulk Set Proxy</h2>
+            <p>Enter proxy to apply to all selected profiles:</p>
+            <input type="text" id="bulkProxyInput" placeholder="socks5://user:pass@host:port">
+            <div class="actions">
+                <button onclick="closeModal()">Cancel</button>
+                <button class="btn-new" onclick="bulkProxy()">Apply Proxy</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Settings Modal -->
+    <div id="globalSettingsModal" class="modal">
+        <div class="modal-content">
+            <h2>Global Settings</h2>
+            
+            <label><strong>Blacklist (one domain/keyword per line):</strong></label>
+            <textarea id="globalBlacklist" rows="8" placeholder="e.g.\nads.google.com\ndoubleclick.net\nadvertising"></textarea>
+            
+            <label><strong>Max Visits Per Week (same domain):</strong></label>
+            <input type="number" id="globalMaxVisits" min="1" max="50" value="3" style="width: 100%; padding: 10px;">
+
+            <label><strong>Max Visits Per Day (same domain):</strong></label>
+            <input type="number" id="globalMaxVisitsPerDay" min="1" max="50" value="1" style="width: 100%; padding: 10px;">
+            
+            <div class="actions">
+                <button onclick="closeModal()">Cancel</button>
+                <button class="btn-new" onclick="saveGlobalSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+        let currentProfileName = '';
+        let profilesData = [];
+        let selectedProfiles = new Set();
+        let runningProfiles = new Set();
+        let launchingProfiles = new Set(); // Local state for "Launching..." spinner
+
+        async function loadProfiles() {
+            try {
+                // Fetch profiles and status properly
+                const [resProfiles, resStatus] = await Promise.all([
+                    fetch(`${API_URL}/profiles`),
+                    fetch(`${API_URL}/status`)
+                ]);
+                
+                profilesData = await resProfiles.json();
+                const statusData = await resStatus.json();
+                
+                runningProfiles = new Set(statusData.running);
+                
+                renderProfiles();
+            } catch (err) {
+                showStatus('Failed to load profiles/status: ' + err.message, 'error');
+            }
+        }
+
+        function renderProfiles() {
+            const tbody = document.getElementById('profileList');
+            tbody.innerHTML = '';
+            
+            const newSelection = new Set();
+            
+            profilesData.forEach(p => {
+                const isSelected = selectedProfiles.has(p.name);
+                if (isSelected) newSelection.add(p.name);
+
+                const tr = document.createElement('tr');
+                const lastMod = new Date(p.lastModified).toLocaleString();
+                const createdAt = p.createdAt ? new Date(p.createdAt).toLocaleString() : 'N/A';
+                
+                // Determine button state
+                const isRunning = runningProfiles.has(p.name);
+                const isLaunching = launchingProfiles.has(p.name);
+                
+                let btnHtml = '';
+                if (isLaunching) {
+                    btnHtml = `<button class="btn-launch loading" disabled>Launching...</button>`;
+                } else if (isRunning) {
+                    btnHtml = `<button class="btn-delete" onclick="stopProfile('${p.name}')">Stop</button>`;
+                } else {
+                    btnHtml = `<button class="btn-launch" onclick="launchProfile('${p.name}')">Launch</button>`;
+                }
+
+                tr.innerHTML = `
+                    <td class="checkbox-col">
+                        <input type="checkbox" class="profile-check" value="${p.name}" 
+                            ${isSelected ? 'checked' : ''} onchange="toggleSelect('${p.name}')">
+                    </td>
+                    <td><strong>${p.name}</strong></td>
+                    <td>${createdAt}</td>
+                    <td>${lastMod}</td>
+                    <td>
+                        ${btnHtml}
+                        <button class="btn-config" onclick="openConfig('${p.name}')">⚙️ Config</button>
+                        <button class="btn-cookies" onclick="exportCookies('${p.name}')">Export Cookies</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            
+            selectedProfiles = newSelection;
+            updateBulkUI();
+        }
+
+        function toggleSelectAll() {
+            const selectAllCheck = document.getElementById('selectAll');
+            if (selectAllCheck.checked) {
+                profilesData.forEach(p => selectedProfiles.add(p.name));
+            } else {
+                selectedProfiles.clear();
+            }
+            renderProfiles();
+        }
+
+        function toggleSelect(name) {
+            if (selectedProfiles.has(name)) {
+                selectedProfiles.delete(name);
+            } else {
+                selectedProfiles.add(name);
+            }
+            updateBulkUI();
+        }
+
+        function updateBulkUI() {
+            const count = selectedProfiles.size;
+            document.getElementById('selectedCount').innerText = count;
+            
+            const bulkBar = document.getElementById('bulkActions');
+            if (count > 0) {
+                bulkBar.classList.add('visible');
+            } else {
+                bulkBar.classList.remove('visible');
+            }
+            
+            // Update Select All checkbox state
+            const selectAllCheck = document.getElementById('selectAll');
+            selectAllCheck.checked = profilesData.length > 0 && count === profilesData.length;
+            selectAllCheck.indeterminate = count > 0 && count < profilesData.length;
+        }
+
+        async function bulkDelete() {
+            const count = selectedProfiles.size;
+            if (!confirm(`Are you sure you want to delete ${count} profiles? This cannot be undone.`)) return;
+
+            try {
+                const res = await fetch(`${API_URL}/profiles/bulk-delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profiles: Array.from(selectedProfiles) })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showStatus(`Deleted ${count} profiles.`, 'success');
+                    selectedProfiles.clear();
+                    loadProfiles();
+                } else {
+                    showStatus('Bulk delete failed: ' + data.error, 'error');
+                }
+            } catch (err) {
+                showStatus('Error executing bulk delete: ' + err.message, 'error');
+            }
+        }
+
+        function openBulkProxyModal() {
+            document.getElementById('bulkProxyInput').value = '';
+            openModal('bulkProxyModal');
+        }
+
+        async function bulkProxy() {
+            const proxy = document.getElementById('bulkProxyInput').value;
+            const count = selectedProfiles.size;
+            
+            try {
+                const res = await fetch(`${API_URL}/profiles/bulk-proxy`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        profiles: Array.from(selectedProfiles),
+                        proxy: proxy 
+                    })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showStatus(`Updated proxy for ${count} profiles.`, 'success');
+                    closeModal();
+                    selectedProfiles.clear();
+                    loadProfiles();
+                } else {
+                    showStatus('Bulk proxy update failed: ' + data.error, 'error');
+                }
+            } catch (err) {
+                showStatus('Error executing bulk proxy: ' + err.message, 'error');
+            }
+        }
+
+        async function launchProfile(name, skipProxyCheck = false) {
+            launchingProfiles.add(name);
+            renderProfiles(); // Update UI to "Launching..."
+
+            try {
+                const body = { profile: name };
+                if (skipProxyCheck) body.skipProxyCheck = true;
+
+                const res = await fetch(`${API_URL}/launch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                
+                const data = await res.json();
+                
+                if (res.status === 502 && data.canBypass) {
+                    // Proxy error with bypass option
+                    if (confirm(`Proxy check failed: ${data.error}\n\nDo you want to launch anyway (bypass proxy check)?`)) {
+                        await launchProfile(name, true);
+                        return;
+                    } else {
+                        showStatus('Launch aborted by user', 'error');
+                    }
+                } else if (data.success) {
+                    showStatus(`Launched ${name}`, 'success');
+                    // Assume running until SSE says otherwise or status reload
+                    runningProfiles.add(name);
+                } else {
+                    showStatus('Launch failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showStatus('Launch failed: ' + err.message, 'error');
+            } finally {
+                // Only clear loading if we are NOT recursively calling (bypass)
+                // But actually we await the recursive call, so we can clear here.
+                // However, the recursive call will also set/clear. 
+                // To avoid flickering or double clearing issue, we can check if it's strictly the end of chain.
+                // Simple way: just remove.
+                launchingProfiles.delete(name);
+                renderProfiles();
+            }
+        }
+
+        async function stopProfile(name) {
+            launchingProfiles.add(name); // Use same loading flag visually or separate?
+            // Let's just use it to disable buttons temporarily if we wanted, 
+            // but for "Stopping" maybe just change text?
+            // For now, let's just call API and waiting for SSE closing event is safest, 
+            // or optimistic update.
+            
+            try {
+                const res = await fetch(`${API_URL}/stop`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profile: name })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showStatus(`Stopped ${name}`, 'success');
+                    runningProfiles.delete(name); 
+                    renderProfiles();
+                } else {
+                    showStatus('Stop failed: ' + data.error, 'error');
+                }
+            } catch (err) {
+                showStatus('Stop error: ' + err.message, 'error');
+            }
+        }
+        
+        // SSE for Real-time Status
+        const evtSource = new EventSource(`${API_URL}/stream-logs`);
+        evtSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'status' && data.profile) {
+                    if (data.status === 'disconnected') {
+                        // Profile stopped
+                        if (runningProfiles.has(data.profile)) {
+                            runningProfiles.delete(data.profile);
+                            renderProfiles();
+                        }
+                    } else {
+                        // Profile started/running (if we had that status)
+                        // Currently launch sets it, but if we had start event we could use it.
+                    }
+                }
+            } catch(e) {}
+        };
+
+        async function exportCookies(name) {
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = 'Extracting...';
+            btn.classList.add('loading');
+
+            try {
+                const res = await fetch(`${API_URL}/cookies/${name}`);
+                if (!res.ok) throw new Error('Export failed');
+                
+                const cookies = await res.json();
+                await navigator.clipboard.writeText(JSON.stringify(cookies, null, 2));
+                
+                showStatus(`Copied ${cookies.length} cookies from ${name} to clipboard!`, 'success');
+            } catch (err) {
+                showStatus('Failed to export cookies: ' + err.message, 'error');
+            } finally {
+                btn.innerText = originalText;
+                btn.classList.remove('loading');
+            }
+        }
+
+        async function createProfile() {
+            const name = document.getElementById('newProfileName').value;
+            if (!name) return;
+
+            try {
+                const res = await fetch(`${API_URL}/profiles`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                
+                if (res.ok) {
+                    closeModal();
+                    loadProfiles();
+                    showStatus('Profile created!', 'success');
+                } else {
+                    const data = await res.json();
+                    alert(data.error);
+                }
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        function openModal(id) { 
+            const el = id ? document.getElementById(id) : document.getElementById('newProfileModal');
+            el.style.display = 'flex'; 
+        }
+        function closeModal() { 
+            document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); 
+        }
+        
+        function showStatus(msg, type) {
+            const el = document.getElementById('status');
+            el.innerText = msg;
+            el.className = 'status-msg ' + type;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 5000);
+        }
+        // Global Settings Functions
+        async function openGlobalSettings() {
+            try {
+                const res = await fetch(`${API_URL}/global-settings`);
+                const settings = await res.json();
+                
+                document.getElementById('globalBlacklist').value = (settings.blacklist || []).join('\n');
+                document.getElementById('globalMaxVisits').value = settings.maxVisitsPerWeek || 3;
+                document.getElementById('globalMaxVisitsPerDay').value = settings.maxVisitsPerDay || 1;
+                
+                openModal('globalSettingsModal');
+            } catch (err) {
+                showStatus('Failed to load global settings', 'error');
+            }
+        }
+
+        async function saveGlobalSettings() {
+            const blacklist = document.getElementById('globalBlacklist').value
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0);
+            const maxVisitsPerWeek = parseInt(document.getElementById('globalMaxVisits').value) || 3;
+            const maxVisitsPerDay = parseInt(document.getElementById('globalMaxVisitsPerDay').value) || 1;
+
+            try {
+                const res = await fetch(`${API_URL}/global-settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ blacklist, maxVisitsPerWeek, maxVisitsPerDay })
+                });
+
+                if (res.ok) {
+                    closeModal();
+                    showStatus('Global settings saved!', 'success');
+                } else {
+                    showStatus('Failed to save global settings', 'error');
+                }
+            } catch (err) {
+                showStatus('Error saving global settings: ' + err.message, 'error');
+            }
+        }
+
+
+
+        // Config Functions
+        async function openConfig(name) {
+            currentProfileName = name;
+            document.getElementById('configTitle').innerText = `Configure Profile: ${name}`;
+            
+            try {
+                const res = await fetch(`${API_URL}/profile-config/${name}`);
+                if (!res.ok) throw new Error('Failed to load config');
+                
+                const config = await res.json();
+                
+                // Populate fields
+                // Handle complex fields like OS/Browser if they become dynamic later, 
+                // for now we just show what we have or default.
+                // The current backend mock stores tags, notes, proxy.
+                // We map tags to OS/Browser for UI if possible, or just ignore for now 
+                // as the UI has specific selects but backend has generic tags.
+                // Let's try to infer/set based on tags if present
+                
+                const tags = config.tags || [];
+                const osSelect = document.getElementById('configOS');
+                const browserSelect = document.getElementById('configBrowser');
+                
+                // Reset to defaults
+                osSelect.value = 'Microsoft Windows';
+                browserSelect.value = 'Chrome';
+                
+                // Try to match tags
+                Array.from(osSelect.options).forEach(opt => {
+                    if (tags.includes(opt.value)) osSelect.value = opt.value;
+                });
+                Array.from(browserSelect.options).forEach(opt => {
+                    if (tags.includes(opt.value)) browserSelect.value = opt.value;
+                });
+
+                document.getElementById('configProxy').value = config.proxy || '';
+                document.getElementById('configNotes').value = config.notes || '';
+                
+                openModal('configModal');
+            } catch (err) {
+                showStatus('Error opening config: ' + err.message, 'error');
+            }
+        }
+
+        async function saveConfig() {
+            if (!currentProfileName) return;
+            
+            const os = document.getElementById('configOS').value;
+            const browser = document.getElementById('configBrowser').value;
+            const proxy = document.getElementById('configProxy').value;
+            const notes = document.getElementById('configNotes').value;
+            
+            // Construct tags from OS and Browser
+            const tags = [os, browser];
+            
+            try {
+                const res = await fetch(`${API_URL}/profile-config/${currentProfileName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tags,
+                        notes,
+                        proxy,
+                        resetFingerprint: false // Add checkbox for this if needed later
+                    })
+                });
+                
+                if (res.ok) {
+                    showStatus('Configuration saved!', 'success');
+                    closeModal();
+                    // Reload profiles to update any display info if needed
+                    loadProfiles(); 
+                } else {
+                    const data = await res.json();
+                    showStatus('Failed to save config: ' + data.error, 'error');
+                }
+            } catch (err) {
+                showStatus('Error saving config: ' + err.message, 'error');
+            }
+        }
+
+
+        // Init
+        loadProfiles();
+    </script>
+</body>
+</html>
