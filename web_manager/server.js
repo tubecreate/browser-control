@@ -220,11 +220,34 @@ app.get('/api/stream-logs', (req, res) => {
     });
 });
 
+function maskSensitiveData(text) {
+    if (!text) return text;
+    let masked = text;
+
+    // 1. Mask Proxy URLs (socks5://user:pass@host:port -> socks5://***:***@host:port)
+    masked = masked.replace(/((?:socks5|socks4|http|https):\/\/)([^:]+):([^@]+)@/g, '$1***:***@');
+
+    // 2. Mask Emails (e.g. example@gmail.com -> e***@gmail.com)
+    // Be careful not to mask too aggressively, requiring @ and dot
+    masked = masked.replace(/\b([a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/g, '$1***@$2');
+
+    // 3. Mask API Keys (simple heuristic: "api_key": "..." or similar)
+    // Look for 20+ alphanumeric chars
+    masked = masked.replace(/("api_key"|"apiKey"|'api_key'|'apiKey')\s*[:=]\s*["']([a-zA-Z0-9]{20,})["']/g, '$1: "***"');
+
+    // 4. Mask Passwords (password: "...")
+    masked = masked.replace(/("password"|"pass"|'password'|'pass')\s*[:=]\s*["']([^"']+)["']/g, '$1: "***"');
+
+    return masked;
+}
+
 function broadcastLog(message, type = 'log', instanceId = null) {
     // Basic filter to ignore boring logs
     if (!message || message.length < 2) return;
     
-    const packet = JSON.stringify({ type, message, instanceId });
+    const cleanMessage = maskSensitiveData(message);
+
+    const packet = JSON.stringify({ type, message: cleanMessage, instanceId });
     logClients.forEach(client => {
         client.res.write(`data: ${packet}\n\n`);
     });

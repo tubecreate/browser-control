@@ -805,6 +805,9 @@ async function main() {
         attempt++;
       } else if ((error.message.includes('Failed to get proxy ip') ||
                   error.message.includes('Failed to launch browser') ||
+                  error.message.includes('socks5 reply has wrong version') ||
+                  error.message.includes('User was rejected by the SOCKS5 server') ||
+                  error.message.includes('cannot complete SOCKS5 connection') ||
                   error.message.includes('Incorrect format')) && attempt < maxAttempts) {
         // Proxy is dead/expired - try to fetch a fresh one from dynamic provider
         console.error(`\n>>> Proxy error: ${error.message}. Trying to refresh proxy...`);
