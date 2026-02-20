@@ -89,6 +89,306 @@ const ACTION_REGISTRY = {
 const browserManager = new BrowserManager();
 
 /**
+ * Auto-inject auth credentials into a login action params.
+ * Looks up agentContext.auth for the current page domain.
+ * Falls back to manually provided params if already set.
+ * @param {import('playwright').Page} page
+ * @param {object} params - Action params (may already have email/password)
+ * @param {object|null} agentCtx - agentContext loaded from JSON
+ * @returns {object} params with credentials injected
+ */
+/**
+ * Check if a browser profile directory already has an active session.
+ * A profile is considered "set up" (has session) if it contains browser data files.
+ * @param {string} profileName - Profile directory name under ./profiles/
+ * @returns {Promise<boolean>}
+ */
+async function checkProfileHasSession(profileName) {
+  if (!profileName) return false;
+  try {
+    const profilePath = path.resolve(`./profiles/${profileName}`);
+    if (!await fs.pathExists(profilePath)) {
+      console.log(`[Auth] Profile '${profileName}' not found — will login to set up.`);
+      return false;
+    }
+    // Check for signs of an active browser session:
+    // Playwright stores profile data in subdirectories like Default/
+    const contents = await fs.readdir(profilePath);
+    const hasData = contents.some(f => ['Default', 'Cookies', 'Local Storage', 'fingerprint.json', 'stats.json'].includes(f));
+    if (hasData) {
+      console.log(`[Auth] Profile '${profileName}' has existing session data — skipping login.`);
+      return true;
+    }
+    console.log(`[Auth] Profile '${profileName}' exists but has no session — will login to set up.`);
+    return false;
+  } catch (e) {
+    console.warn(`[Auth] Could not check profile session: ${e.message}`);
+    return false;
+  }
+}
+
+function injectAuthCredentials(page, params, agentCtx) {
+  // If credentials already in params, use them as-is
+  if ((params.email || params.username) && params.password) return params;
+  if (!agentCtx || !agentCtx.auth) return params;
+
+  const currentUrl = page.url();
+  const auth = agentCtx.auth;
+
+  const DOMAIN_MAP = {
+    'google.com': 'google', 'accounts.google.com': 'google',
+    'gmail.com': 'google', 'mail.google.com': 'google',
+    'docs.google.com': 'google', 'sheets.google.com': 'google',
+    'drive.google.com': 'google', 'youtube.com': 'google',
+    'facebook.com': 'facebook', 'fb.com': 'facebook',
+    'tiktok.com': 'tiktok',
+    'twitter.com': 'x', 'x.com': 'x',
+    'discord.com': 'discord',
+    'telegram.org': 'telegram', 'web.telegram.org': 'telegram'
+  };
+
+  let platform = params.platform || null;
+  if (!platform) {
+    try {
+      const hostname = new URL(currentUrl).hostname.replace(/^www\./, '');
+      platform = DOMAIN_MAP[hostname];
+      if (!platform) {
+        for (const [domain, p] of Object.entries(DOMAIN_MAP)) {
+          if (hostname.endsWith(domain)) { platform = p; break; }
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (!platform || !auth[platform] || !Array.isArray(auth[platform])) return params;
+  const account = auth[platform].find(a => a.enabled !== false);
+  if (!account) return params;
+
+  console.log(`[Auth] Auto-injecting ${platform} credentials for: ${account.username || account.email}`);
+  return {
+    ...params,
+    platform,
+    email: account.username || account.email,
+    username: account.username || account.email,
+    password: account.password,
+    recoveryEmail: account.recoveryEmail || params.recoveryEmail || null,
+    twoFactorCodes: account.twoFactorCodes || params.twoFactorCodes || null,
+    // Pass the account's linked profile so caller can decide to skip login
+    authProfile: account.profile || null
+  };
+}
+
+/**
+ * Check if the current Google page shows a logged-in session.
+ * Returns true if user appears to be logged in.
+ * @param {import('playwright').Page} page
+ * @returns {Promise<boolean>}
+ */
+async function checkGoogleLoginStatus(page) {
+  try {
+    const url = page.url();
+    // If we're on a sign-in page, definitely not logged in
+    if (url.includes('accounts.google.com/signin') || url.includes('/ServiceLogin')) {
+      return false;
+    }
+    // Check for avatar/profile button using modern + legacy Google selectors
+    const loggedIn = await page.evaluate(() => {
+      // Modern Google 2024: account avatar button (top-right)
+      const modernAvatar = document.querySelector(
+        'a[href*="myaccount.google.com"] img, ' +
+        'img[alt*="Google Account"], ' +
+        '[data-ogsr-up] img, ' +          // Google Search avatar
+        'a[aria-label*="Google Account"], ' +
+        '.gb_A img, ' +                    // Legacy
+        '[data-gbap], #gbwa'               // Legacy
+      );
+      // "Sign in" button means NOT logged in
+      const signInBtn = document.querySelector(
+        'a[href*="ServiceLogin"], a[href*="accounts.google.com/signin"], ' +
+        'a[data-is-menu-item][href*="signin"]'
+      );
+      if (signInBtn) return false;
+      if (modernAvatar) return true;
+      // Fallback: check for account email in page meta/cookies area
+      const accountEl = document.querySelector('[data-email], [data-authuser], #gb a[href*="mail.google"]');
+      return !!accountEl;
+    });
+    return loggedIn;
+  } catch (e) {
+    console.warn('[Auth] Could not check Google login status:', e.message);
+    return false;
+  }
+}
+
+/**
+ * Auto-login: checks google login state, tries login once per profile per run.
+ * Failure is tracked PER ACCOUNT USERNAME in a global auth_status.json file.
+ * - Next run: skips failed username, picks next non-failed enabled account.
+ * - A profile only attempts login ONCE per run (does not retry with another account).
+ */
+async function autoLoginIfNeeded(page, profileName, agentCtx) {
+  if (!agentCtx || !agentCtx.auth) return 'no_credentials';
+
+  // Global status file tracks both FAILED accounts and already-LOGGED-IN profiles
+  const statusFile = path.resolve('./auth_status.json');
+
+  // 1. Read global auth status
+  let authStatus = {};
+  try {
+    if (await fs.pathExists(statusFile)) {
+      authStatus = await fs.readJson(statusFile);
+    }
+  } catch (e) {}
+
+  // ✅ FIX 1: If this profile already has a recorded successful login, skip entirely
+  const profileKey = `profile:${profileName}`;
+  if (authStatus[profileKey] && authStatus[profileKey].loggedIn === true) {
+    const since = authStatus[profileKey].loggedInAt || 'unknown';
+    console.log(`[Auth] ✅ Profile '${profileName}' already logged in (recorded ${since}) — skipping.`);
+    return 'skipped';
+  }
+
+  const COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+  const now = Date.now();
+
+  // Helper: is an account on cooldown?
+  function isOnCooldown(username) {
+    const entry = authStatus[username];
+    if (!entry) return false;
+    if (entry.failed === true) return true; // permanent fail until manual reset
+    if (entry.lastUsedAt) {
+      const elapsed = now - new Date(entry.lastUsedAt).getTime();
+      return elapsed < COOLDOWN_MS;
+    }
+    return false;
+  }
+
+  const failedUsernames = new Set(
+    Object.entries(authStatus)
+      .filter(([k, v]) => !k.startsWith('profile:') && (v.failed === true || isOnCooldown(k)))
+      .map(([username]) => username)
+  );
+
+  // 2. Pick account: prefer the one linked to this profile, fallback to first non-cooldown enabled
+  const googleAccounts = agentCtx.auth?.google || [];
+
+  // Log cooldown status for debugging
+  for (const a of googleAccounts) {
+    const entry = authStatus[a.username];
+    if (entry && entry.lastUsedAt) {
+      const elapsed = now - new Date(entry.lastUsedAt).getTime();
+      const remaining = Math.max(0, COOLDOWN_MS - elapsed);
+      const remH = (remaining / 3600000).toFixed(1);
+      console.log(`[Auth] Account '${a.username}': ${isOnCooldown(a.username) ? `⏳ cooldown ${remH}h left` : '✅ available'}`);
+    }
+  }
+
+  // ✅ FIX 2: First try to find account whose .profile matches profileName AND not on cooldown
+  let account = googleAccounts.find(
+    a => a.enabled !== false && !failedUsernames.has(a.username) && a.profile === profileName
+  );
+  // Fall back to any non-cooldown enabled account
+  if (!account) {
+    account = googleAccounts.find(a => a.enabled !== false && !failedUsernames.has(a.username));
+  }
+
+  if (!account) {
+    const reasons = googleAccounts.map(a => {
+      if (a.enabled === false) return `${a.username}: disabled`;
+      if (authStatus[a.username]?.failed) return `${a.username}: failed`;
+      if (isOnCooldown(a.username)) {
+        const elapsed = now - new Date(authStatus[a.username].lastUsedAt).getTime();
+        const remH = ((COOLDOWN_MS - elapsed) / 3600000).toFixed(1);
+        return `${a.username}: cooldown (${remH}h left)`;
+      }
+      return `${a.username}: unknown`;
+    });
+    console.log('[Auth] No eligible Google account. Reasons:\n  ' + reasons.join('\n  '));
+    return 'no_credentials';
+  }
+
+  // 3. Navigate to Google and check if already logged in via DOM
+  try {
+    await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(2000);
+  } catch (e) {
+    console.warn('[Auth] Could not navigate to Google for login check:', e.message);
+    return 'skipped';
+  }
+
+  const alreadyLoggedIn = await checkGoogleLoginStatus(page);
+  if (alreadyLoggedIn) {
+    console.log(`[Auth] ✅ Profile '${profileName}' already logged in to Google (DOM check).`);
+    // Persist so next run skips DOM check entirely
+    authStatus[profileKey] = { loggedIn: true, loggedInAt: new Date().toISOString(), account: account.username };
+    await fs.writeJson(statusFile, authStatus, { spaces: 2 });
+    return 'skipped';
+  }
+
+  // 4. Mark account as in-use BEFORE attempting (prevents concurrent runs picking same account)
+  authStatus[account.username] = {
+    ...(authStatus[account.username] || {}),
+    lastUsedAt: new Date().toISOString(),
+    inUseBy: profileName,
+    failed: false
+  };
+  await fs.writeJson(statusFile, authStatus, { spaces: 2 });
+
+  console.log(`\n[Auth] Profile '${profileName}' not logged in. Trying account: ${account.username}`);
+  console.log(`[Auth] (${failedUsernames.size} account(s) on cooldown or failed)`);
+
+  const { login } = await import('./actions/login.js');
+
+  try {
+    await page.goto('https://accounts.google.com/signin', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(1500);
+
+    await login(page, {
+      platform: 'google',
+      email: account.username,
+      username: account.username,
+      password: account.password,
+      recoveryEmail: account.recoveryEmail || null,
+      twoFactorCodes: account.twoFactorCodes || null
+    });
+
+    // 5. Verify login success
+    await page.waitForTimeout(3000);
+    await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(2000);
+    const loginSuccess = await checkGoogleLoginStatus(page);
+
+    if (loginSuccess) {
+      console.log(`[Auth] ✅ Login SUCCESS: ${account.username} → profile '${profileName}'`);
+      // Record profile as logged in
+      authStatus[profileKey] = { loggedIn: true, loggedInAt: new Date().toISOString(), account: account.username };
+      // Keep lastUsedAt on account (for 24h cooldown), clear inUseBy
+      authStatus[account.username] = {
+        lastUsedAt: authStatus[account.username]?.lastUsedAt || new Date().toISOString(),
+        failed: false
+      };
+      await fs.writeJson(statusFile, authStatus, { spaces: 2 });
+      return 'success';
+    } else {
+      throw new Error('Google did not show logged-in state after login attempt');
+    }
+
+  } catch (e) {
+    console.error(`[Auth] ❌ Login FAILED for account '${account.username}': ${e.message}`);
+    authStatus[account.username] = {
+      failed: true,
+      failedAt: new Date().toISOString(),
+      profile: profileName,
+      reason: e.message.substring(0, 200)
+    };
+    await fs.writeJson(statusFile, authStatus, { spaces: 2 });
+    console.log(`[Auth] Marked '${account.username}' as FAILED in auth_status.json`);
+    console.log(`[Auth] Other profiles will skip this account and pick the next one.`);
+    return 'failed';
+  }
+}
+
+/**
  * Main Orchestrator
  */
 async function main() {
@@ -316,7 +616,10 @@ async function main() {
       const finalHeadless = isHeadless || !!exportCookies;
 
       const launchArgs = [
-          '--remote-debugging-port=0' // Force random port
+          '--remote-debugging-port=0', // Force random port
+          // Auto-load the TubeCreate extension for profile badge support
+          `--load-extension=${path.resolve('../../browser-extension')}`,
+          `--disable-extensions-except=${path.resolve('../../browser-extension')}`,
       ];
 
       // Check for Mobile Fingerprint to resize window
@@ -378,7 +681,9 @@ async function main() {
           });
         });
 
-        // 2. Background IP Check (Reporting to Node Server)
+        // 2. Profile Name — expose for extension badge (URL bar)
+        window.__PROFILE_NAME__ = profileName || '';
+
         if (instanceId) {
             const checkIP = async () => {
                 try {
@@ -441,8 +746,22 @@ async function main() {
           if (actionFn) {
             console.log(`\n--- Executing: ${step.action} ---`);
             try {
-              // Pass isRetry down to actions
-              const result = await actionFn(page, { ...step.params, isRetry });
+              // Auto-inject auth credentials if this is a login action
+              let stepParams = { ...step.params, isRetry };
+              if (step.action === 'login') {
+                stepParams = injectAuthCredentials(page, stepParams, agentContext);
+                // If account has a linked profile, skip login when profile already has session
+                if (stepParams.authProfile) {
+                  const hasSession = await checkProfileHasSession(stepParams.authProfile);
+                  if (hasSession) {
+                    console.log(`[Auth] Skipping login — profile '${stepParams.authProfile}' already has session.`);
+                    continue;
+                  } else {
+                    console.log(`[Auth] Profile '${stepParams.authProfile}' has no session — logging in to set up.`);
+                  }
+                }
+              }
+              const result = await actionFn(page, stepParams);
               if (result) {
                 results.push({ action: step.action, result });
               }
@@ -534,6 +853,18 @@ async function main() {
                    await page.waitForTimeout(5000);
                }
            }
+        }
+
+        // === AUTO-LOGIN: Attempt Google login if profile not logged in yet ===
+        if (agentContext && agentContext.auth && agentContext.auth.google && agentContext.auth.google.length > 0) {
+          const loginResult = await autoLoginIfNeeded(page, profileName, agentContext);
+          if (loginResult === 'success') {
+            console.log('[Session] Auto-login complete. Resuming session...');
+          } else if (loginResult === 'failed') {
+            console.log('[Session] Auto-login failed. Continuing session without login.');
+          } else if (loginResult === 'skipped') {
+            console.log('[Session] Auto-login skipped (already logged in or previously failed).');
+          }
         }
 
         session.start(page.url(), userGoal, actionSequence);
@@ -745,7 +1076,23 @@ async function main() {
 
               if (actionFn) {
                 try {
-                  await actionFn(page, { ...nextAction.params, isRetry });
+                  // Auto-inject auth credentials if this is a login action
+                  let actionParams = { ...nextAction.params, isRetry };
+                  if (nextAction.action === 'login') {
+                    actionParams = injectAuthCredentials(page, actionParams, agentContext);
+                    // If account has a linked profile, skip login when profile already has session
+                    if (actionParams.authProfile) {
+                      const hasSession = await checkProfileHasSession(actionParams.authProfile);
+                      if (hasSession) {
+                        console.log(`[Auth] Skipping login — profile '${actionParams.authProfile}' already has session.`);
+                        session.recordAction('login', actionParams, 'skipped', 'profile already has session');
+                        continue;
+                      } else {
+                        console.log(`[Auth] Profile '${actionParams.authProfile}' has no session — logging in to set up.`);
+                      }
+                    }
+                  }
+                  await actionFn(page, actionParams);
                   session.recordAction(nextAction.action, nextAction.params, 'success');
                   
                   // Update RPG Stats

@@ -47,6 +47,71 @@ export class SessionManager {
   }
 
   /**
+   * Get credentials for a given URL/domain from agentContext.auth
+   * Maps domain → platform → first enabled account
+   * @param {string} url - Current page URL
+   * @returns {{ username, email, password, recoveryEmail, twoFactorCodes, platform } | null}
+   */
+  getCredentialsForSite(url = '') {
+    if (!this.agentContext || !this.agentContext.auth) return null;
+    const auth = this.agentContext.auth;
+
+    // Domain → Platform mapping
+    const DOMAIN_MAP = {
+      'google.com': 'google',
+      'accounts.google.com': 'google',
+      'gmail.com': 'google',
+      'mail.google.com': 'google',
+      'docs.google.com': 'google',
+      'sheets.google.com': 'google',
+      'drive.google.com': 'google',
+      'youtube.com': 'google',
+      'facebook.com': 'facebook',
+      'fb.com': 'facebook',
+      'tiktok.com': 'tiktok',
+      'twitter.com': 'x',
+      'x.com': 'x',
+      'discord.com': 'discord',
+      'telegram.org': 'telegram',
+      'web.telegram.org': 'telegram'
+    };
+
+    let platform = null;
+    try {
+      const hostname = new URL(url).hostname.replace(/^www\./, '');
+      // Exact match first
+      platform = DOMAIN_MAP[hostname];
+      // Suffix match fallback
+      if (!platform) {
+        for (const [domain, p] of Object.entries(DOMAIN_MAP)) {
+          if (hostname.endsWith(domain)) { platform = p; break; }
+        }
+      }
+    } catch (e) { /* invalid url */ }
+
+    if (!platform || !auth[platform] || !Array.isArray(auth[platform])) return null;
+
+    // Return first enabled account
+    const account = auth[platform].find(a => a.enabled !== false);
+    if (!account) {
+      console.log(`[Auth] No enabled account found for platform: ${platform}`);
+      return null;
+    }
+
+    const creds = {
+      platform,
+      email: account.username || account.email,
+      username: account.username || account.email,
+      password: account.password,
+      recoveryEmail: account.recoveryEmail || null,
+      twoFactorCodes: account.twoFactorCodes || null,
+      notes: account.notes || ''
+    };
+    console.log(`[Auth] Found ${platform} credentials for: ${creds.email}`);
+    return creds;
+  }
+
+  /**
    * Start a new session
    */
   start(initialUrl = null, userGoal = null, initialActions = []) {
