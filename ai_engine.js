@@ -27,9 +27,29 @@ export class AIEngine {
    * @param {string} prompt 
    * @returns {Promise<{actions: Array<{action: string, params: object}>, profile?: string}>}
    */
-  async planActions(prompt) {
+  async planActions(prompt, stats = null) {
     console.log(`AI is thinking about: "${prompt}"...`);
     
+    let statsContext = "";
+    if (stats) {
+        statsContext = `
+7. RPG STATS (YOU ARE A "${stats.class.toUpperCase()}" - Level ${stats.level}):
+   - INT (Intelligence): ${stats.int}
+   - IMPACT (Contribution): ${stats.impact}
+   - ASSIST (Support): ${stats.assist}
+   - MISTAKE (Errors): ${stats.mistake}
+   - KDA: ${stats.kda}
+   
+   GUIDELINES FOR "${stats.class.toUpperCase()}":
+   ${stats.class === 'Scholar' ? '- Focus on reading, researching, and using technical keywords.' : ''}
+   ${stats.class === 'Builder' ? '- Focus on creating content, typing prompts, and generating value.' : ''}
+   ${stats.class === 'Supporter' ? '- Focus on watching videos, liking, and clicking useful links.' : ''}
+   ${stats.class === 'Novice' ? '- Explore randomly to gain experience.' : ''}
+   
+   GOAL: Improve your lowest stat while fulfilling the user's request.
+`;
+    }
+
     const systemPrompt = `You are a browser automation orchestrator. 
 Your job is to convert user instructions into a JSON sequence of browser actions.
 
@@ -46,6 +66,7 @@ CRITICAL RULES:
 5. USE ONLY THESE ACTIONS:
 ${JSON.stringify(this.actions, null, 2)}
 6. PROFILE: Extract 'mở profile "xyz"' into ROOT "profile".
+${statsContext}
 
 Example Output: {
   "profile": "bbb",

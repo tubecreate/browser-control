@@ -298,7 +298,10 @@ async loadBlacklist() {
     
     try {
       const content = await page.evaluate(() => {
-        const bodyText = document.body.innerText;
+        if (!document.body) {
+           return { isErrorPage: true, hasCaptcha: false, potentialPopups: [], interactiveElements: [], hasVideo: false };
+        }
+        const bodyText = document.body.innerText || "";
         
         // Error Detection
         const isErrorPage = 
@@ -334,6 +337,31 @@ async loadBlacklist() {
         ];
         
         const allInteractive = document.querySelectorAll('a[href], button, input[type="submit"], [role="button"]');
+        
+        // 1. Find Popup Containers (Modals, Dialogs, Overlays)
+        let blockingPopup = null;
+        const containers = document.querySelectorAll('[role="dialog"], [role="alertdialog"], .modal, .popup, .overlay');
+        for (const container of containers) {
+            const rect = container.getBoundingClientRect();
+            if (rect.width > 200 && rect.height > 100) { // Safety: ignore tiny ones
+                const style = window.getComputedStyle(container);
+                if (style.position === 'fixed' || style.position === 'absolute') {
+                    // It's a container. Collect all buttons inside.
+                    const internalButtons = container.querySelectorAll('a[href], button, [role="button"]');
+                    const buttons = Array.from(internalButtons).map(b => ({
+                        text: b.innerText?.trim() || b.textContent?.trim() || b.getAttribute('aria-label') || '',
+                        tag: b.tagName.toLowerCase()
+                    })).filter(b => b.text.length > 0);
+
+                    blockingPopup = {
+                        selector: container.id ? `#${container.id}` : (container.className ? `.${container.className.split(' ')[0]}` : 'dialog'),
+                        buttons: buttons
+                    };
+                    break; 
+                }
+            }
+        }
+
         for (const el of allInteractive) {
           const text = el.innerText?.trim() || el.textContent?.trim() || el.getAttribute('aria-label') || el.getAttribute('title') || '';
           const lowerText = text.toLowerCase();
@@ -384,6 +412,7 @@ async loadBlacklist() {
           isErrorPage,
           hasCaptcha,
           potentialPopups,
+          blockingPopup, // NEW: Full popup context
           interactiveElements, 
           hasVideo: interactiveVideoCount > 0, 
           videoCount: interactiveVideoCount,

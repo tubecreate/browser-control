@@ -481,7 +481,8 @@ async function main() {
       if (sessionMode) {
         // 5. Start Session Mode (if enabled)
         // Parse model from args, default to qwen:latest if not set
-        const aiModel = args.model || 'qwen:latest';
+        // FIX: Use args['ai-model'] passing from Python, fallback to args.model or default
+        const sessionAiModel = args['ai-model'] || args.model || 'qwen:latest';
         const minSessionMinutes = parseInt(args['session-duration']) || 10;
         
         console.log(`\n=== SESSION MODE ENABLED (${minSessionMinutes} min minimum) ===\n`);
@@ -502,7 +503,11 @@ async function main() {
             }
         }
 
+<<<<<<< HEAD
         const session = new SessionManager(minSessionMinutes, userGoal, aiModel, agentContext, args.profile || 'default');
+=======
+        const session = new SessionManager(minSessionMinutes, userGoal, sessionAiModel, agentContext);
+>>>>>>> 6c685f4 (fix(proxy): add retry logic for initial connection and navigation, improve error handling)
         
         // Initial Stat Load for AI context
         try {
@@ -510,7 +515,7 @@ async function main() {
           session.updateStats(initialStats);
         } catch (e) {}
         
-        console.log(`\n>>> STARTING SESSION MODE (${minSessionMinutes} min) with Model: ${aiModel} <<<`);
+        console.log(`\n>>> STARTING SESSION MODE (${minSessionMinutes} min) with Model: ${sessionAiModel} <<<`);
         console.log(`Goal: "${userGoal}"`);
         
         // Navigate to a starter page if on about:blank to give the session context
@@ -619,6 +624,7 @@ async function main() {
             // DYNAMIC: Scan page content to detect available elements
             const pageContent = await session.scanPageContent(page);
             
+<<<<<<< HEAD
             if (pageContent.isErrorPage) {
                 console.log('\n[Session] ❌ Network error page detected.');
                 
@@ -655,6 +661,63 @@ async function main() {
                 console.log('[Session] Step 3: All recovery failed. Rotating proxy...');
                 await page.waitForTimeout(5000);
                 throw new Error('BROWSER_CRASHED'); // Force rotation by crashing to outer loop
+=======
+            // --- AUTO-DISMISS POPUPS ---
+            if (pageContent.blockingPopup) {
+                console.log(`[Session] Blocking popup detected: ${pageContent.blockingPopup.selector}. Attempting dismissal...`);
+                let popupCleared = false;
+                let attempts = 0;
+                const dismissTerms = ['close', 'not now', 'dismiss', 'no thanks', 'maybe later', 'deny', 'block', 'reject'];
+
+                while (attempts < 5) {
+                    attempts++;
+                    // A. Prioritize known dismiss buttons
+                    let targetBtn = null;
+                    for (const btn of pageContent.blockingPopup.buttons) {
+                        if (dismissTerms.some(term => btn.text.toLowerCase().includes(term))) {
+                            targetBtn = btn;
+                            break;
+                        }
+                    }
+
+                    // B. Fallback: Random button inside popup
+                    if (!targetBtn && pageContent.blockingPopup.buttons.length > 0) {
+                        console.log(`[Session] No clear dismissal button found. Picking a random button (Attempt ${attempts})...`);
+                        targetBtn = pageContent.blockingPopup.buttons[Math.floor(Math.random() * pageContent.blockingPopup.buttons.length)];
+                    }
+
+                    if (targetBtn) {
+                        console.log(`[Session] Clicking popup button: "${targetBtn.text}"`);
+                        try {
+                            // Use the existing click action logic (text-based)
+                            const clickAction = ACTION_REGISTRY['click'];
+                            await clickAction.click(page, { text: targetBtn.text });
+                            await page.waitForTimeout(2000); // Wait for popup to disappear
+
+                            // Re-check
+                            const reScan = await session.scanPageContent(page);
+                            if (!reScan.blockingPopup) {
+                                console.log('[Session] Popup successfully cleared.');
+                                popupCleared = true;
+                                break;
+                            }
+                        } catch (e) {
+                            console.warn(`[Session] Popup click failed: ${e.message}`);
+                        }
+                    } else {
+                        console.log('[Session] No interactive elements in popup to click.');
+                        break;
+                    }
+                }
+                
+                if (!popupCleared) {
+                    console.warn('[Session] Failed to clear popup after multiple attempts. Proceeding anyway...');
+                } else {
+                    // If cleared, re-scan one last time to get clean page content
+                    const cleanScan = await session.scanPageContent(page);
+                    Object.assign(pageContent, cleanScan);
+                }
+>>>>>>> 6c685f4 (fix(proxy): add retry logic for initial connection and navigation, improve error handling)
             }
             
             // Generate next action chain based on actual page content (await async AI generation)
@@ -740,6 +803,12 @@ async function main() {
             
             // Recovery strategy: Navigate to a safe page and start fresh
             try {
+              // CRITICAL: Check if page is valid before navigating
+              if (!page || page.isClosed()) {
+                  console.error('[Session] Page is closed/detached. Cannot recover in-session.');
+                  throw new Error('BROWSER_CRASHED');
+              }
+
               const currentUrl = page.url();
               
               // If we're stuck on an error page or the same URL, navigate to a fresh start
@@ -766,8 +835,13 @@ async function main() {
             } catch (recoveryError) {
               console.warn(`[Session] Recovery navigation failed: ${recoveryError.message}`);
               
-              // If recovery also fails with crash, propagate up
-              if (recoveryError.message.includes('crashed')) {
+              // If recovery also fails with crash OR DETACHED FRAME, propagate up
+              if (recoveryError.message.includes('crashed') || 
+                  recoveryError.message.includes('closed') || 
+                  recoveryError.message.includes('detached') || 
+                  recoveryError.message.includes('Target closed') ||
+                  recoveryError.message.includes('Frame was detached')) {
+                console.error('[Session] Critical recovery failure (Detached/Crashed). Restarting browser...');
                 throw new Error('BROWSER_CRASHED');
               }
             }
