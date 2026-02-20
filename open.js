@@ -724,9 +724,15 @@ async function main() {
       if (isManual) {
         console.log('>>> MANUAL MODE: Browser launched. Waiting for user to close window...');
         
-        // Navigate to google if on about:blank
-        if (page.url() === 'about:blank') {
-            await page.goto('https://www.google.com');
+        // Navigate to profile start page (antidetect-style: shows profile name in URL bar)
+        const startUrl = `http://localhost:3000/profile-start/${encodeURIComponent(profileName)}?profile=${encodeURIComponent(profileName)}`;
+        try {
+            await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 5000 });
+            console.log(`[Profile] Start page: ${startUrl}`);
+        } catch (e) {
+            // web_manager not running — fallback to google
+            console.warn('[Profile] web_manager not reachable, falling back to Google.');
+            if (page.url() === 'about:blank') await page.goto('https://www.google.com');
         }
 
         // Loop to check if context is still open
@@ -822,11 +828,7 @@ async function main() {
             }
         }
 
-<<<<<<< HEAD
         const session = new SessionManager(minSessionMinutes, userGoal, aiModel, agentContext, args.profile || 'default');
-=======
-        const session = new SessionManager(minSessionMinutes, userGoal, sessionAiModel, agentContext);
->>>>>>> 6c685f4 (fix(proxy): add retry logic for initial connection and navigation, improve error handling)
         
         // Initial Stat Load for AI context
         try {
@@ -955,7 +957,6 @@ async function main() {
             // DYNAMIC: Scan page content to detect available elements
             const pageContent = await session.scanPageContent(page);
             
-<<<<<<< HEAD
             if (pageContent.isErrorPage) {
                 console.log('\n[Session] ❌ Network error page detected.');
                 
@@ -992,7 +993,8 @@ async function main() {
                 console.log('[Session] Step 3: All recovery failed. Rotating proxy...');
                 await page.waitForTimeout(5000);
                 throw new Error('BROWSER_CRASHED'); // Force rotation by crashing to outer loop
-=======
+            }
+
             // --- AUTO-DISMISS POPUPS ---
             if (pageContent.blockingPopup) {
                 console.log(`[Session] Blocking popup detected: ${pageContent.blockingPopup.selector}. Attempting dismissal...`);
@@ -1048,7 +1050,7 @@ async function main() {
                     const cleanScan = await session.scanPageContent(page);
                     Object.assign(pageContent, cleanScan);
                 }
->>>>>>> 6c685f4 (fix(proxy): add retry logic for initial connection and navigation, improve error handling)
+
             }
             
             // Generate next action chain based on actual page content (await async AI generation)

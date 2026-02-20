@@ -53,6 +53,12 @@ app.get('/', (req, res) => {
     res.send('Browser Launcher is Running');
 });
 
+// Profile Start Page — antidetect style new tab showing profile info
+// URL: http://localhost:3000/profile-start/PROFILE_NAME
+app.get('/profile-start/:name', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'profile-start.html'));
+});
+
 // API: List Profiles
 app.get('/api/profiles', async (req, res) => {
     try {
