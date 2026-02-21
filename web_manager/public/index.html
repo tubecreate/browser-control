@@ -131,14 +131,39 @@
             font-size: 12px;
             color: #888;
             margin-bottom: 10px;
-            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #111;
+            border: 1px solid #2a2a2a;
+            border-radius: 20px;
+            padding: 4px 10px 4px 4px;
             overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         .card-url a {
             color: #667eea;
             text-decoration: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+
+        .profile-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            letter-spacing: 0.3px;
+            box-shadow: 0 1px 4px rgba(102,126,234,0.4);
         }
 
         .card-stats {
@@ -482,6 +507,7 @@
                     <div class="status-badge status-active">ACTIVE</div>
                 </div>
                 <div class="card-url">
+                    <span class="profile-chip">👤 <span class="chip-label">${browser.profile}</span></span>
                     <a href="${browser.url || '#'}" target="_blank">${browser.url || 'Loading...'}</a>
                 </div>
                 <div class="card-ip" style="font-size: 11px; color: #aaa; margin-bottom: 8px;">
@@ -528,6 +554,12 @@
             if (urlLink) {
                 urlLink.textContent = browser.url || 'Loading...';
                 urlLink.href = browser.url || '#';
+            }
+
+            const profileChip = card.querySelector('.chip-label');
+            if (profileChip) {
+                profileChip.textContent = browser.profile;
+                profileChip.parentElement.setAttribute('title', browser.profile);
             }
             
             const ipEl = card.querySelector('.card-ip');

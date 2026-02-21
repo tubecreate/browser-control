@@ -849,6 +849,37 @@ async function main() {
           }
         }
 
+        // 4. Profile Name Chip (top-center of every page)
+        window.addEventListener('DOMContentLoaded', () => {
+          if (document.getElementById('__profile-chip__') || !profileName) return;
+          const chip = document.createElement('div');
+          chip.id = '__profile-chip__';
+          chip.textContent = '\uD83D\uDC64 ' + profileName;
+          chip.style.cssText = [
+            'position: fixed',
+            'top: 8px',
+            'left: 50%',
+            'transform: translateX(-50%)',
+            'z-index: 2147483647',
+            'pointer-events: none',
+            'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            'color: #fff',
+            'font-size: 12px',
+            'font-weight: 700',
+            'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+            'padding: 4px 14px 4px 10px',
+            'border-radius: 20px',
+            'box-shadow: 0 2px 8px rgba(0,0,0,0.35)',
+            'letter-spacing: 0.3px',
+            'white-space: nowrap',
+            'opacity: 0.92',
+            'user-select: none',
+          ].join(';');
+          document.documentElement.appendChild(chip);
+        });
+
+        // 2. Background IP Check (Reporting to Node Server)
+>>>>>>> 78b9a9c (feat: keyword diversification + auto-retry SOCKS5 + rate limit browser launches)
         if (instanceId) {
             const checkIP = async () => {
                 try {
@@ -1199,7 +1230,7 @@ async function main() {
             if (!pageContent.isErrorPage && page) {
                 await session.recordPageVisit(page.url(), pageContent.title, page);
             }
-            
+
             if (pageContent.isErrorPage) {
                 console.log('\n[Session] ❌ Network error page detected.');
                 
