@@ -21,3 +21,10 @@ data/
 .git/
 .DS_Store
 *.log
+
+# === SENSITIVE DATA - Never push ===
+auth_status.json
+*_agent.json
+agent.json
+*agent*.json
+tasks/
