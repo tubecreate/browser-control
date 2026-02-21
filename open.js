@@ -302,24 +302,32 @@ async function autoLoginIfNeeded(page, profileName, agentCtx) {
     return 'skipped';
   }
 
-  const COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+  const COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours - only for failed accounts
   const now = Date.now();
 
   // Helper: is an account on cooldown?
+  // An account is blocked ONLY if it has explicitly failed=true
+  // lastUsedAt alone does NOT block — an account can login to multiple profiles
   function isOnCooldown(username) {
     const entry = authStatus[username];
     if (!entry) return false;
-    if (entry.failed === true) return true; // permanent fail until manual reset
-    if (entry.lastUsedAt) {
-      const elapsed = now - new Date(entry.lastUsedAt).getTime();
-      return elapsed < COOLDOWN_MS;
+    if (entry.failed === true) {
+      // Check if failed entry has been around for 24h (auto-reset after 24h)
+      if (entry.failedAt) {
+        const elapsed = now - new Date(entry.failedAt).getTime();
+        if (elapsed > COOLDOWN_MS) {
+          console.log(`[Auth] Account '${username}' failed >24h ago — auto-reset, will retry.`);
+          return false; // Allow retry after 24h
+        }
+      }
+      return true; // Still in failure cooldown
     }
-    return false;
+    return false; // lastUsedAt alone does NOT trigger cooldown
   }
 
   const failedUsernames = new Set(
     Object.entries(authStatus)
-      .filter(([k, v]) => !k.startsWith('profile:') && (v.failed === true || isOnCooldown(k)))
+      .filter(([k, v]) => !k.startsWith('profile:') && isOnCooldown(k))
       .map(([username]) => username)
   );
 
@@ -337,13 +345,19 @@ async function autoLoginIfNeeded(page, profileName, agentCtx) {
     }
   }
 
-  // ✅ FIX 2: First try to find account whose .profile matches profileName AND not on cooldown
+  // ✅ FIX 2: Find best matching account
+  // 1. Exact match (account.profile === profileName)
+  // 2. Wildcard match (account.profile is empty or matches)
   let account = googleAccounts.find(
-    a => a.enabled !== false && !failedUsernames.has(a.username) && a.profile === profileName
+    a => a.enabled !== false && !failedUsernames.has(a.username) && (a.profile === profileName)
   );
-  // Fall back to any non-cooldown enabled account
+  
+  // Fall back to any non-cooldown enabled account (treat empty profile as wildcard)
   if (!account) {
     account = googleAccounts.find(a => a.enabled !== false && !failedUsernames.has(a.username));
+    if (account) {
+      console.log(`[Auth] Using account '${account.username}' as wildcard for profile '${profileName}'`);
+    }
   }
 
   if (!account) {
@@ -372,11 +386,20 @@ async function autoLoginIfNeeded(page, profileName, agentCtx) {
 
   const alreadyLoggedIn = await checkGoogleLoginStatus(page);
   if (alreadyLoggedIn) {
-    console.log(`[Auth] ✅ Profile '${profileName}' already logged in to Google (DOM check).`);
+    console.log(`[Auth] ✅ Profile '${profileName}' is indeed logged in to Google (DOM verified).`);
     // Persist so next run skips DOM check entirely
-    authStatus[profileKey] = { loggedIn: true, loggedInAt: new Date().toISOString(), account: account.username };
-    await fs.writeJson(statusFile, authStatus, { spaces: 2 });
+    if (!authStatus[profileKey] || !authStatus[profileKey].loggedIn) {
+        authStatus[profileKey] = { loggedIn: true, loggedInAt: new Date().toISOString(), account: account.username };
+        await fs.writeJson(statusFile, authStatus, { spaces: 2 });
+    }
     return 'skipped';
+  } else {
+    // If we thought we were logged in but DOM check says no -> clear it!
+    if (authStatus[profileKey] && authStatus[profileKey].loggedIn) {
+        console.log(`[Auth] ⚠️ Profile '${profileName}' was marked as logged in but DOM check failed. Clearing status...`);
+        delete authStatus[profileKey];
+        await fs.writeJson(statusFile, authStatus, { spaces: 2 });
+    }
   }
 
   // 4. Mark account as in-use BEFORE attempting (prevents concurrent runs picking same account)
