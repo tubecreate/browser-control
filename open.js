@@ -470,6 +470,12 @@ async function main() {
     try {
         agentContext = await fs.readJson(args['context-file']);
         console.log(`[Session] Agent Context loaded: ${agentContext.agent_name}`);
+        
+        // --- Normalization: support new JSON structure (personality.interests -> interests) ---
+        if (agentContext.personality && agentContext.personality.interests && !agentContext.interests) {
+          console.log('[Session] Normalizing agent context: personality.interests -> interests');
+          agentContext.interests = agentContext.personality.interests;
+        }
     } catch (e) {
         console.error('[Session] Failed to load context file:', e.message);
     }
@@ -824,6 +830,18 @@ async function main() {
         page = newPage; // Update the main page reference
         console.log(`[TabManager] Now on: ${page.url()}`);
       });
+
+      // --- AUTO-LOGIN TRIGGER ---
+      // Check if we need to login before starting actions/session
+      if (agentContext && agentContext.auth && agentContext.auth.google && agentContext.auth.google.length > 0) {
+          console.log(`\n[Auth] Auto-login check for profile: ${profileName}...`);
+          try {
+              const loginResult = await autoLoginIfNeeded(page, profileName, agentContext);
+              console.log(`[Auth] Auto-login result: ${loginResult}`);
+          } catch (e) {
+              console.error(`[Auth] Error during auto-login: ${e.message}`);
+          }
+      }
 
       // 3. Manual Mode Check
       if (isManual) {

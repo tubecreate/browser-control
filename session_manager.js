@@ -938,7 +938,10 @@ CRITICAL RULES:
       if (this.agentContext && rand < 0.4) {
         // ... (Simplified search logic to save space/time, full logic in original file)
         // Re-implementing the original logic briefly:
-        const topics = [...(this.agentContext.interests || [])];
+        // Support both old and new JSON structure (interests vs personality.interests)
+        const topics = [...(this.agentContext.interests || 
+                          (this.agentContext.personality && this.agentContext.personality.interests) || 
+                          [])];
         if (topics.length > 0) {
             const randomTopic = topics[Math.floor(Math.random() * topics.length)];
             return [{ action: 'search', params: { keyword: randomTopic } }];
