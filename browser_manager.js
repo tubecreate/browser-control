@@ -53,7 +53,7 @@ export class BrowserManager {
             try {
                 const data = await fs.readFile(fingerprintPath, 'utf8');
                 fingerprint = JSON.parse(data);
-                if (!fingerprint || typeof fingerprint !== 'object' || Object.keys(fingerprint).length < 10) {
+                if (!fingerprint || (typeof fingerprint !== 'object' && typeof fingerprint !== 'string') || (typeof fingerprint === 'object' && Object.keys(fingerprint).length < 10)) {
                      throw new Error('Invalid fingerprint');
                 }
                 console.log(`Fingerprint loaded successfully.`);
@@ -174,9 +174,41 @@ export class BrowserManager {
              let fpAttempts = 0;
              while (fpAttempts < 2) {
                  try {
+
                     // plugin.useFingerprint accepts either the fingerprint object or the token string
+                    // BUT in practice it often requires the JSON string if fetched as string
                     if (fingerprint) {
-                        plugin.useFingerprint(fingerprint);
+                        try {
+                            if (typeof fingerprint === 'object') {
+                                // If object, try passing as object first
+                                plugin.useFingerprint(fingerprint);
+                            } else {
+                                // If string, pass as is
+                                plugin.useFingerprint(fingerprint);
+                            }
+                        } catch (err) {
+                            // Logic: if object failed, maybe try stringify?
+                            // if string failed, maybe try parse?
+                            if (typeof fingerprint === 'object') {
+                                console.log(`useFingerprint(object) failed: ${err.message}. Trying stringified...`);
+                                plugin.useFingerprint(JSON.stringify(fingerprint));
+                            } else if (typeof fingerprint === 'string') {
+                                // Try parsing?
+                                try {
+                                    const parsed = JSON.parse(fingerprint);
+                                    if (typeof parsed === 'object') {
+                                        console.log('useFingerprint(string) failed, trying parsed object...');
+                                        plugin.useFingerprint(parsed);
+                                    } else {
+                                        throw err;
+                                    }
+                                } catch (parseErr) {
+                                    throw err;
+                                }
+                            } else {
+                                throw err;
+                            }
+                        }
                         break; // Success
                     } else {
                         throw new Error('Fingerprint is empty');
@@ -235,7 +267,8 @@ export class BrowserManager {
                 if (options.skipProxyCheck && (
                     e.message.toLowerCase().includes('failed to get proxy ip') || 
                     e.message.toLowerCase().includes('proxy') ||
-                    e.message.toLowerCase().includes('timeout')
+                    e.message.toLowerCase().includes('timeout') ||
+                    e.message.toLowerCase().includes('incorrect format')
                 )) {
                     console.warn(`[Launch] Proxy failed (${e.message}) but skipProxyCheck is enabled. Disabling proxy and retrying...`);
                     this.applyProxy(null); // Disable proxy in plugin
@@ -247,7 +280,22 @@ export class BrowserManager {
 
                 if (e.message.toLowerCase().includes('failed to get proxy ip') || 
                     e.message.toLowerCase().includes('proxy') ||
-                    e.message.toLowerCase().includes('timeout')) {
+                    e.message.toLowerCase().includes('timeout') ||
+                    e.message.toLowerCase().includes('incorrect format')) {
+                    
+                    if (e.message.toLowerCase().includes('incorrect format')) {
+                         if (!options.proxy) {
+                             console.warn(`[Launch] 'Incorrect format' persisted with NO PROXY! This confirms FINGERPRINT is invalid.`);
+                             throw new Error('FINGERPRINT_FATAL_ERROR');
+                         }
+                         console.warn(`[Launch] 'Incorrect format' error detected. This likely means PROXY is invalid: ${proxy}`);
+                         console.warn(`[Launch] Disabling proxy for next attempt to verify...`);
+                         this.applyProxy(null);
+                         options.proxy = null;
+                         launchAttempt++;
+                         continue;
+                    }
+
                     console.warn(`[Launch] Attempt ${launchAttempt} failed: ${e.message}. Retrying in 5 seconds...`);
                     launchAttempt++;
                     await new Promise(r => setTimeout(r, 5000));

@@ -2,6 +2,7 @@ import { plugin } from 'playwright-with-fingerprints';
 import minimist from 'minimist';
 import fs from 'fs-extra';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { AIEngine } from './ai_engine.js';
 import * as searchAction from './actions/search.js';
 import * as browseAction from './actions/browse.js';
@@ -16,6 +17,19 @@ import * as saveImageAction from './actions/save_image.js';
 import { SessionManager } from './session_manager.js';
 import { BrowserManager } from './browser_manager.js';
 import axios from 'axios';
+import { createRequire } from 'module';
+
+// Mission Manager (CommonJS require to load from tasks/)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const _require = createRequire(import.meta.url);
+let missionManager = null;
+try {
+  missionManager = _require('./tasks/mission_manager.cjs');
+  console.log('[Mission] mission_manager.js loaded ✅');
+} catch (e) {
+  console.warn('[Mission] mission_manager.js not found — mission mode disabled.', e.message);
+}
 
 let agentContext = null;
 
@@ -87,6 +101,46 @@ const ACTION_REGISTRY = {
 };
 
 const browserManager = new BrowserManager();
+
+/**
+ * Execute a mission's action[] array using the local ACTION_REGISTRY.
+ * Mirrors the non-session action loop but wrapped for mission lifecycle.
+ * @param {import('playwright').Page} page
+ * @param {Array} actions - mission.actions[]
+ * @param {string} missionId
+ * @param {string} profileName
+ * @param {object} agentCtx
+ */
+async function executeMissionActions(page, actions, missionId, profileName, agentCtx) {
+  console.log(`\n╔══════════════════════════════════════════════════╗`);
+  console.log(`║  🎯 MISSION START: ${missionId}`);
+  console.log(`║  Profile: ${profileName}`);
+  console.log(`║  Actions: ${actions.length}`);
+  console.log(`╚══════════════════════════════════════════════════╝\n`);
+
+  for (const step of actions) {
+    const actionFn = ACTION_REGISTRY[step.action];
+    if (!actionFn) {
+      console.warn(`[Mission] Unknown action: ${step.action} — skipping`);
+      continue;
+    }
+    try {
+      console.log(`[Mission] ▶ ${step.action} ${JSON.stringify(step.params)}`);
+      let stepParams = { ...step.params };
+      if (step.action === 'login') {
+        stepParams = injectAuthCredentials(page, stepParams, agentCtx);
+      }
+      await actionFn(page, stepParams);
+      // Small human-like pause between mission steps
+      await page.waitForTimeout(1500 + Math.floor(Math.random() * 2000));
+    } catch (err) {
+      console.error(`[Mission] ❌ Step '${step.action}' failed: ${err.message}`);
+      // Don't abort — attempt remaining steps
+    }
+  }
+
+  console.log(`\n[Mission] ✅ All steps executed for ${missionId}\n`);
+}
 
 /**
  * Auto-inject auth credentials into a login action params.
@@ -587,6 +641,17 @@ async function main() {
                   // Parse fingerprint if it's a JSON string
                   try {
                       fingerprint = typeof fingerprintData === 'string' ? JSON.parse(fingerprintData) : fingerprintData;
+                      
+                      // Fix for wrapper object (e.g. {"canvas":true, ..., "fingerprint": "..."})
+                      if (fingerprint && fingerprint.fingerprint) {
+                          console.log('Detected wrapped fingerprint structure. Extracting inner fingerprint...');
+                          try {
+                              // If separate string, try to parse it, otherwise use as string
+                              fingerprint = typeof fingerprint.fingerprint === 'string' ? JSON.parse(fingerprint.fingerprint) : fingerprint.fingerprint;
+                          } catch (e) {
+                              fingerprint = fingerprint.fingerprint; 
+                          }
+                      }
                   } catch (e) {
                       fingerprint = fingerprintData; // Use as-is if not JSON
                   }
@@ -659,7 +724,17 @@ async function main() {
       }
 
       // --- BACKGROUND HELPERS (Mouse & IP Check) ---
-      await context.addInitScript(({ instanceId, profileName }) => {
+      // Determine proxy type label for profile indicator
+      const profileProxy = agentContext?.proxy || args.proxy || '';
+      let proxyLabel = 'Direct';
+      if (profileProxy) {
+        if (profileProxy.startsWith('socks5')) proxyLabel = 'SOCKS5';
+        else if (profileProxy.startsWith('socks4')) proxyLabel = 'SOCKS4';
+        else if (profileProxy.startsWith('http')) proxyLabel = 'HTTP';
+        else proxyLabel = 'Proxy';
+      }
+
+      await context.addInitScript(({ instanceId, profileName, proxyLabel }) => {
         // 1. Mouse Visualization
         window.addEventListener('DOMContentLoaded', () => {
           if (document.getElementById('mouse-pointer-visualization')) return;
@@ -683,6 +758,36 @@ async function main() {
 
         // 2. Profile Name — expose for extension badge (URL bar)
         window.__PROFILE_NAME__ = profileName || '';
+
+        // 3. Tab Title Injection — antidetect style: "[profileName] original title"
+        //    Visible in the tab strip and when clicking URL bar
+        if (profileName) {
+          const prefix = `[${profileName}]`;
+          const setTitle = () => {
+            if (!document.title.startsWith(prefix)) {
+              const originalTitle = document.title || 'New Tab';
+              document.title = `${prefix} ${originalTitle}`;
+            }
+          };
+
+          // Run as soon as possible
+          setTitle();
+          window.addEventListener('DOMContentLoaded', setTitle);
+          window.addEventListener('load', setTitle);
+
+          // MutationObserver: re-apply prefix whenever any script changes the title
+          const observer = new MutationObserver(setTitle);
+          const titleEl = document.querySelector('title');
+          if (titleEl) {
+            observer.observe(titleEl, { childList: true });
+          } else {
+            // title may not exist yet — watch document head
+            new MutationObserver((_, obs) => {
+              const t = document.querySelector('title');
+              if (t) { observer.observe(t, { childList: true }); obs.disconnect(); }
+            }).observe(document.documentElement, { childList: true, subtree: true });
+          }
+        }
 
         if (instanceId) {
             const checkIP = async () => {
@@ -710,7 +815,7 @@ async function main() {
             // Check every 2 minutes
             setInterval(checkIP, 120000);
         }
-      }, { instanceId, profileName });
+      }, { instanceId, profileName, proxyLabel });
 
       // --- TAB MANAGEMENT ---
       // Listen for new pages (tabs) and switch focus
@@ -868,6 +973,50 @@ async function main() {
             console.log('[Session] Auto-login skipped (already logged in or previously failed).');
           }
         }
+
+        // ═══════════════════════════════════════════════════════
+        // 🎯 MISSION-FIRST: Claim & execute a pending mission
+        //    before the AI free-session begins.
+        // ═══════════════════════════════════════════════════════
+        let claimedMission = null;
+        if (missionManager) {
+          try {
+            const taskTags = agentContext?.task_tags || [];
+            console.log(`[Mission] Checking for pending missions (tags: [${taskTags.join(', ') || 'any'}])...`);
+            claimedMission = missionManager.claimMission(profileName, taskTags);
+
+            if (claimedMission) {
+              console.log(`[Mission] 🎯 Claimed: "${claimedMission.title}" (${claimedMission.id})`);
+              console.log(`[Mission]    Progress: ${claimedMission.completed_count}/${claimedMission.target_count}`);
+
+              // Report mission start to dashboard
+              await reportStatus(args, {
+                status: `mission: ${claimedMission.title.substring(0, 40)}`,
+                missionId: claimedMission.id
+              });
+
+              try {
+                await executeMissionActions(
+                  page,
+                  claimedMission.actions,
+                  claimedMission.id,
+                  profileName,
+                  agentContext
+                );
+                missionManager.completeMission(claimedMission.id, profileName);
+                console.log(`[Mission] ✅ ${claimedMission.id} marked complete by ${profileName}`);
+              } catch (missionErr) {
+                console.error(`[Mission] ❌ Mission execution error: ${missionErr.message}`);
+                missionManager.failMission(claimedMission.id, missionErr.message);
+              }
+            } else {
+              console.log('[Mission] No pending missions matching profile tags — entering free session.');
+            }
+          } catch (missionCheckErr) {
+            console.warn('[Mission] Could not check missions:', missionCheckErr.message);
+          }
+        }
+        // ═══════════════════════════════════════════════════════
 
         session.start(page.url(), userGoal, actionSequence);
         
@@ -1223,8 +1372,13 @@ async function main() {
       } else if (error.message === 'CAPTCHA_DETECTED' && attempt < maxAttempts) {
         console.error('\n>>> CAPTCHA detected on first attempt. Retrying...');
         attempt++;
-      } else if (error.message === 'FINGERPRINT_RETRY' && attempt < maxAttempts) {
-        console.error('\n>>> Retrying with fresh fingerprint...');
+      } else if ((error.message === 'FINGERPRINT_RETRY' || error.message === 'FINGERPRINT_FATAL_ERROR') && attempt < maxAttempts) {
+        console.error('\n>>> Retrying with fresh fingerprint (Fatal Error Detected)...');
+        // Force delete fingerprint
+        try {
+             const fingerprintPath = path.join(profilePath, 'fingerprint.json');
+             await fs.remove(fingerprintPath);
+        } catch (e) {}
         attempt++;
       } else if ((error.message.includes('Failed to get proxy ip') ||
                   error.message.includes('Failed to launch browser') ||
