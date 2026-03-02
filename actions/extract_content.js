@@ -319,7 +319,8 @@ export async function extract_content(page, params = {}) {
       }
 
       // Avoid duplicates by URL
-      const alreadyExists = existingArticles.some(a => a.url === currentUrl);
+      let alreadyExists = false;
+      alreadyExists = existingArticles.some(a => a.url === currentUrl);
       if (alreadyExists) {
         console.log(`[EXTRACT_CONTENT] Article already saved for this URL. Skipping duplicate.`);
       } else {
@@ -340,7 +341,10 @@ export async function extract_content(page, params = {}) {
     // ═══════════════════════════════════════════
     // 6. ALSO SAVE to profile history.json
     // ═══════════════════════════════════════════
+    // Declare alreadyExists outside if not already for scope, but we use a try/catch above so we just recheck
     try {
+      // Re-read or just check if we should skip
+      // To strictly avoid history duplicates even if articles.json check somehow failed, check history too
       const historyPath = path.join(SCRAPED_DATA_DIR, profileName, 'history.json');
       let history = {};
       if (await fs.pathExists(historyPath)) {
@@ -351,23 +355,28 @@ export async function extract_content(page, params = {}) {
         history.scrapedArticles = [];
       }
 
-      // Save a lighter version to history (no full content, just metadata)
-      history.scrapedArticles.push({
-        title: result.title,
-        url: result.url,
-        author: result.author,
-        imageCount: result.imageCount,
-        contentLength: result.content.length,
-        scrapedAt: result.scrapedAt
-      });
+      // Final deduplication check for history
+      if (!history.scrapedArticles.some(a => a.url === currentUrl)) {
+        // Save a lighter version to history (no full content, just metadata)
+        history.scrapedArticles.push({
+          title: result.title,
+          url: result.url,
+          author: result.author,
+          imageCount: result.imageCount,
+          contentLength: result.content.length,
+          scrapedAt: result.scrapedAt
+        });
 
-      // Keep max 200 entries in history
-      if (history.scrapedArticles.length > 200) {
-        history.scrapedArticles = history.scrapedArticles.slice(-200);
+        // Keep max 200 entries in history
+        if (history.scrapedArticles.length > 200) {
+          history.scrapedArticles = history.scrapedArticles.slice(-200);
+        }
+
+        await fs.writeJson(historyPath, history, { spaces: 2 });
+        console.log(`[EXTRACT_CONTENT] 📋 Updated history.json (${history.scrapedArticles.length} articles tracked)`);
+      } else {
+        console.log(`[EXTRACT_CONTENT] 📋 Skipping history.json update (URL already exists)`);
       }
-
-      await fs.writeJson(historyPath, history, { spaces: 2 });
-      console.log(`[EXTRACT_CONTENT] 📋 Updated history.json (${history.scrapedArticles.length} articles tracked)`);
     } catch (e) {
       console.warn(`[EXTRACT_CONTENT] Failed to update history: ${e.message}`);
     }

@@ -955,7 +955,7 @@ Allowed Abstract Actions:
 - click_link { "criteria": "text/topic to look for" } -> Target SPECIFIC internal/external links.
 - browse { "iterations": 5 } -> Use to explore content.
 - watch { "duration": "short|medium|long" } -> Use if on a video page.
-- extract_content {} -> Use AFTER navigating to a news article or blog post to save its content and images.
+${context.enable_scraping ? '- extract_content {} -> Use AFTER navigating to a news article or blog post to save its content and images.' : ''}
 
 Example Output:
 [
@@ -1037,8 +1037,8 @@ CRITICAL RULES:
       }
     }
 
-    // PRIORITY 1: Content Page - Auto-extract articles
-    if (pageContent.isContentPage && !currentUrl.includes('youtube.com') && !currentUrl.includes('google.com')) {
+    // PRIORITY 1: Content Page - Auto-extract articles (IF ENABLED)
+    if (this.agentContext?.enable_scraping && pageContent.isContentPage && !currentUrl.includes('youtube.com') && !currentUrl.includes('google.com')) {
       // Check if we already extracted this URL (current session OR previous sessions)
       const alreadyExtractedThisSession = this.actionHistory.some(
         a => a.action === 'extract_content' && a.url === currentUrl && a.status === 'success'
