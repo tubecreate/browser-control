@@ -14,6 +14,8 @@ import * as watchAction from './actions/watch.js';
 import * as navigateAction from './actions/navigate.js';
 import * as typeAction from './actions/type.js';
 import * as saveImageAction from './actions/save_image.js';
+import * as searchExtractAction from './actions/search_extract.js';
+import * as extractContentAction from './actions/extract_content.js';
 import { SessionManager } from './session_manager.js';
 import { BrowserManager } from './browser_manager.js';
 import axios from 'axios';
@@ -87,12 +89,14 @@ const ACTION_REGISTRY = {
   type: typeAction.type,
   save_image: saveImageAction.save_image,
   search: searchAction.search,
+  search_extract: searchExtractAction.search_extract,
   browse: browseAction.browse,
   click: clickAction.click,
   login: loginAction.login,
   comment: commentAction.comment,
   watch: watchAction.watch,
   visual_scan: visualScanAction.visual_scan,
+  extract_content: extractContentAction.extract_content,
   wait: async (page, params) => {
     const duration = parseInt(params.duration) || 5;
     console.log(`[WAIT] Waiting for ${duration} seconds...`);
@@ -899,7 +903,7 @@ async function main() {
             console.log(`\n--- Executing: ${step.action} ---`);
             try {
               // Auto-inject auth credentials if this is a login action
-              let stepParams = { ...step.params, isRetry };
+              let stepParams = { ...step.params, isRetry, aiModel };
               if (step.action === 'login') {
                 stepParams = injectAuthCredentials(page, stepParams, agentContext);
                 // If account has a linked profile, skip login when profile already has session
@@ -1269,7 +1273,11 @@ async function main() {
               if (actionFn) {
                 try {
                   // Auto-inject auth credentials if this is a login action
-                  let actionParams = { ...nextAction.params, isRetry };
+                  let actionParams = { ...nextAction.params, isRetry, aiModel: sessionAiModel };
+                  // Inject profileName for extract_content action
+                  if (nextAction.action === 'extract_content') {
+                    actionParams.profileName = profileName;
+                  }
                   if (nextAction.action === 'login') {
                     actionParams = injectAuthCredentials(page, actionParams, agentContext);
                     // If account has a linked profile, skip login when profile already has session
@@ -1284,8 +1292,13 @@ async function main() {
                       }
                     }
                   }
-                  await actionFn(page, actionParams);
+                  const actionResult = await actionFn(page, actionParams);
                   session.recordAction(nextAction.action, nextAction.params, 'success');
+                  
+                  // Track scraped URL to prevent duplicate extraction
+                  if (nextAction.action === 'extract_content' && actionResult) {
+                    session.addScrapedUrl(page.url());
+                  }
                   
                   // Update RPG Stats
                   const updatedStats = await browserManager.updateStats(profileName, nextAction.action, {

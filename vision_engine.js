@@ -148,9 +148,10 @@ If no solution is visible, return null. DO NOT ADD ANY TEXT OUTSIDE THE JSON.`;
  * 2. DeepSeek: Generate Vietnamese comment from Description + Title.
  * @param {import('playwright').Page} page
  * @param {string} title - Video title.
+ * @param {string} aiModel - Text AI model to use.
  * @returns {Promise<string>} - Generated comment.
  */
-export async function generateContextAwareComment(page, title, userInstruction = "") {
+export async function generateContextAwareComment(page, title, userInstruction = "", aiModel = "qwen:latest") {
   try {
     const timestamp = Date.now();
     const screenshotPath = path.join(SCREENSHOT_DIR, `comment_context_${timestamp}.jpg`);
@@ -209,7 +210,7 @@ Instructions:
 - ONLY return the comment text. No quotes.`;
 
     const textPayload = {
-      model: "deepseek-r1:latest", 
+      model: aiModel, 
       prompt: textPrompt,
       stream: false
     };

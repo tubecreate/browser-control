@@ -478,9 +478,9 @@ app.post('/api/launch', async (req, res) => {
         }
     }
 
-    // Add model flag if provided
+    // Add AI model flag if provided
     if (req.body.model) {
-        args.push('--model', req.body.model);
+        args.push('--ai-model', req.body.model);
     }
     
     // Generate unique instance ID for tracking

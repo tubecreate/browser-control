@@ -41,9 +41,12 @@ export class SessionManager {
     this.stats = null; // RPG Stats
     this.failedElements = new Set(); // Track elements that failed to be interacted with
     this.aiCallHistory = []; // Track timestamps of AI calls for frequency warning
+    this.scrapedUrls = new Set(); // Track URLs already scraped (cross-session)
     
     // Load blacklist from profile config
     this.loadBlacklist().catch(e => console.warn('[SessionManager] Failed to load blacklist:', e.message));
+    // Load previously scraped URLs to avoid duplicates across sessions
+    this.loadScrapedUrls().catch(e => console.warn('[SessionManager] Failed to load scraped URLs:', e.message));
   }
 
   /**
@@ -248,7 +251,11 @@ export class SessionManager {
    */
   isStuckOnSameUrl() {
     if (this.actionHistory.length < 5) return false;
-    const recent = this.actionHistory.slice(-5);
+    // Only count navigation-type actions (exclude browse/watch/extract_content which stay on same URL)
+    const NON_NAV_ACTIONS = ['browse', 'watch', 'extract_content', 'visual_scan', 'comment'];
+    const navActions = this.actionHistory.filter(a => !NON_NAV_ACTIONS.includes(a.action));
+    if (navActions.length < 5) return false;
+    const recent = navActions.slice(-5);
     const urls = recent.map(a => a.url);
     return urls.every(u => u === urls[0]);
   }
@@ -291,6 +298,34 @@ export class SessionManager {
     } catch (e) {
       console.warn('[SessionManager] Failed to save history:', e.message);
     }
+  }
+
+  /**
+   * Load previously scraped article URLs to avoid duplicate extraction across sessions.
+   */
+  async loadScrapedUrls() {
+    if (!this.profileName) return;
+    try {
+      const articlesPath = path.resolve('./scraped_data', this.profileName, 'articles.json');
+      if (await fs.pathExists(articlesPath)) {
+        const articles = await fs.readJson(articlesPath);
+        if (Array.isArray(articles)) {
+          for (const a of articles) {
+            if (a.url) this.scrapedUrls.add(a.url);
+          }
+          console.log(`[SessionManager] Loaded ${this.scrapedUrls.size} previously scraped URLs.`);
+        }
+      }
+    } catch (e) {
+      console.warn('[SessionManager] Failed to load scraped URLs:', e.message);
+    }
+  }
+
+  /**
+   * Mark a URL as scraped (called after successful extract_content)
+   */
+  addScrapedUrl(url) {
+    if (url) this.scrapedUrls.add(url);
   }
 
 async loadBlacklist() {
@@ -489,7 +524,15 @@ async loadBlacklist() {
           hasSearchBox: document.querySelectorAll('input[type="search"], input[name*="search" i], input[placeholder*="search" i]').length > 0,
           imageCount: document.querySelectorAll('img').length,
           headingCount: document.querySelectorAll('h1, h2, h3').length,
-          hasCommentSection: document.querySelectorAll('[class*="comment" i], [id*="comment" i]').length > 0
+          hasCommentSection: document.querySelectorAll('[class*="comment" i], [id*="comment" i]').length > 0,
+          // Content page detection for extract_content action
+          isContentPage: (() => {
+            const ogType = document.querySelector('meta[property="og:type"]')?.content || '';
+            const hasArticleTag = document.querySelectorAll('article, [role="article"]').length > 0;
+            const h1 = document.querySelector('h1');
+            const contentParas = document.querySelectorAll('article p, .post-content p, .entry-content p, .article-body p, main p');
+            return ogType === 'article' || (hasArticleTag && contentParas.length >= 3) || (!!h1 && contentParas.length >= 5);
+          })()
         };
       });
       
@@ -586,6 +629,9 @@ async loadBlacklist() {
       pageType: this.currentContext.pageType,
       hasVideo: pageContent?.hasVideo || false,
       hasSearchBox: pageContent?.hasSearchBox || false,
+      isContentPage: pageContent?.isContentPage || false,
+      alreadyScraped: pageContent?.isContentPage ? this.scrapedUrls.has(this.currentContext.url) : false,
+      currentActivity: this.agentContext?.current_activity || 'browse',
       remainingMinutes,
       recentHistory: this.actionHistory.slice(-5).map(a => `${a.action} on ${a.url} -> ${a.status}${a.error ? ` (Error: ${a.error})` : ''}`)
     };
@@ -853,7 +899,7 @@ async loadBlacklist() {
       }
 
       // 3. Direct Pass-through
-      if (action === 'browse' || action === 'watch' || action === 'navigate') {
+      if (action === 'browse' || action === 'watch' || action === 'navigate' || action === 'extract_content') {
           return skeletonAction;
       }
       
@@ -886,6 +932,12 @@ User Goal: "${this.userGoal}"
 ${statsContext}
 Current Context: ${JSON.stringify(context, null, 2)}${contextHint}
 ${popupInfo}
+${context.currentActivity && ['work', 'research', 'study', 'morningCheck'].includes(context.currentActivity) ? `
+SCHEDULE MODE: "${context.currentActivity}" — You are in WORK/RESEARCH mode.
+- AVOID YouTube and video sites. Focus on reading articles, exploring websites, and extracting content.
+- PRIORITIZE: click_result, click_link, browse, extract_content over watch.
+- Search for content related to work interests, NOT entertainment.
+` : ''}
 
 INSTRUCTIONS:
 1. Generate a JSON Array of abstract actions (The SKELETON).
@@ -893,6 +945,9 @@ INSTRUCTIONS:
 3. If the current page contains relevant results, FOCUS on clicking them instead of searching again.
 4. DO NOT try to guess specific link text. Use "intent" or "criteria".
 5. The system will "ground" your abstract actions to real elements.
+6. PRIORITIZE browsing and exploring content (click_result, browse, watch) over extract_content.
+7. Only use extract_content ONCE per article page. If "alreadyScraped" is true, DO NOT use extract_content — just browse normally.
+8. After extract_content, ALWAYS continue with browse or click_link to keep exploring.
 
 Allowed Abstract Actions:
 - search { "intent": "what to search for" } -> ONLY use if no relevant results are on page.
@@ -900,6 +955,7 @@ Allowed Abstract Actions:
 - click_link { "criteria": "text/topic to look for" } -> Target SPECIFIC internal/external links.
 - browse { "iterations": 5 } -> Use to explore content.
 - watch { "duration": "short|medium|long" } -> Use if on a video page.
+- extract_content {} -> Use AFTER navigating to a news article or blog post to save its content and images.
 
 Example Output:
 [
@@ -927,35 +983,74 @@ CRITICAL RULES:
     
     const rand = Math.random();
     const currentUrl = this.currentContext.url || '';
+    const currentActivity = this.agentContext?.current_activity || 'browse';
+    const isWorkMode = ['work', 'research', 'study', 'morningCheck', 'checkEmails'].includes(currentActivity);
     
-    // PRIORITY 0: YouTube - Focus on watching videos
+    // PRIORITY 0: YouTube handling (schedule-aware)
     if (currentUrl.includes('youtube.com')) {
-      if (currentUrl.includes('/watch')) {
-        return [{ action: 'watch', params: { duration: '60s' } }];
-      }
-      
-      // SEARCH LOGIC
-      if (this.agentContext && rand < 0.4) {
-        // ... (Simplified search logic to save space/time, full logic in original file)
-        // Re-implementing the original logic briefly:
-        // Support both old and new JSON structure (interests vs personality.interests)
-        const topics = [...(this.agentContext.interests || 
-                          (this.agentContext.personality && this.agentContext.personality.interests) || 
-                          [])];
-        if (topics.length > 0) {
-            const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-            return [{ action: 'search', params: { keyword: randomTopic } }];
+      // WORK MODE: Minimize YouTube — navigate away to search articles instead
+      if (isWorkMode) {
+        // 95% of the time: leave YouTube, search for work-related content
+        if (rand > 0.05) {
+          console.log(`[SessionManager] WORK MODE: Redirecting away from YouTube to focus on articles.`);
+          const topics = [...(this.agentContext?.interests || 
+                            (this.agentContext?.personality?.interests) || 
+                            ['technology news', 'industry analysis'])];
+          const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+          return [
+            { action: 'navigate', params: { url: 'https://www.google.com' } },
+            { action: 'search', params: { keyword: randomTopic + ' article' } },
+            { action: 'click_result', params: { criteria: 'article or blog post about ' + randomTopic } }
+          ];
+        }
+        // 5% chance: watch briefly to maintain natural behavior
+        if (currentUrl.includes('/watch')) {
+          return [{ action: 'watch', params: { duration: '30s' } }];
+        }
+      } else {
+        // ENTERTAINMENT MODE: YouTube is fine
+        if (currentUrl.includes('/watch')) {
+          return [{ action: 'watch', params: { duration: '60s' } }];
+        }
+        
+        // SEARCH LOGIC
+        if (this.agentContext && rand < 0.4) {
+          const topics = [...(this.agentContext.interests || 
+                            (this.agentContext.personality && this.agentContext.personality.interests) || 
+                            [])];
+          if (topics.length > 0) {
+              const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+              return [{ action: 'search', params: { keyword: randomTopic } }];
+          }
+        }
+        
+        const videoLinks = (pageContent.interactiveElements || []).filter(el =>
+          el.href?.includes('youtube.com/watch') || el.href?.includes('/watch?v=')
+        );
+        if (videoLinks.length > 0 && rand < 0.8) {
+          const randomVideo = videoLinks[Math.floor(Math.random() * videoLinks.length)];
+          return [
+            { action: 'click', params: { text: randomVideo.text } },
+            { action: 'watch', params: { duration: '60s' } }
+          ];
         }
       }
-      
-      const videoLinks = (pageContent.interactiveElements || []).filter(el =>
-        el.href?.includes('youtube.com/watch') || el.href?.includes('/watch?v=')
+    }
+
+    // PRIORITY 1: Content Page - Auto-extract articles
+    if (pageContent.isContentPage && !currentUrl.includes('youtube.com') && !currentUrl.includes('google.com')) {
+      // Check if we already extracted this URL (current session OR previous sessions)
+      const alreadyExtractedThisSession = this.actionHistory.some(
+        a => a.action === 'extract_content' && a.url === currentUrl && a.status === 'success'
       );
-      if (videoLinks.length > 0 && rand < 0.8) {
-        const randomVideo = videoLinks[Math.floor(Math.random() * videoLinks.length)];
+      const alreadyExtractedBefore = this.scrapedUrls.has(currentUrl);
+      if (alreadyExtractedThisSession || alreadyExtractedBefore) {
+        console.log(`[SessionManager] URL already scraped — skipping extract_content: ${currentUrl}`);
+      } else {
+        console.log('[SessionManager] Content page detected! Auto-triggering extract_content.');
         return [
-          { action: 'click', params: { text: randomVideo.text } },
-          { action: 'watch', params: { duration: '60s' } }
+          { action: 'extract_content', params: {} },
+          { action: 'browse', params: { iterations: 3 } }
         ];
       }
     }

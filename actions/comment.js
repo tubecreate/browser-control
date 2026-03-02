@@ -62,7 +62,8 @@ export async function comment(page, params = {}) {
     console.log('Generating comment using Visual AI...');
     console.log('Ignoring params.instruction as requested. Relying on Title + Vision only.');
     // Pass "" as instruction to force AI to rely only on Title/Vision
-    let commentText = await generateContextAwareComment(page, metadata.title, "");
+    const aiModel = params.aiModel || "qwen:latest";
+    let commentText = await generateContextAwareComment(page, metadata.title, "", aiModel);
     
     if (!commentText) {
        commentText = "Video rất hay, cảm ơn bạn đã chia sẻ!";
