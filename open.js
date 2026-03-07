@@ -1151,6 +1151,11 @@ async function main() {
             // DYNAMIC: Scan page content to detect available elements
             const pageContent = await session.scanPageContent(page);
             
+            // Record the page visit
+            if (!pageContent.isErrorPage && page) {
+                await session.recordPageVisit(page.url(), pageContent.title);
+            }
+            
             if (pageContent.isErrorPage) {
                 console.log('\n[Session] ❌ Network error page detected.');
                 
@@ -1277,6 +1282,8 @@ async function main() {
                   // Inject profileName for extract_content action
                   if (nextAction.action === 'extract_content') {
                     actionParams.profileName = profileName;
+                    actionParams.enable_scraping = agentContext?.enable_scraping !== false; // handle absent defaults
+                    actionParams.scraper_text_limit = agentContext?.scraper_text_limit || 10000;
                   }
                   if (nextAction.action === 'login') {
                     actionParams = injectAuthCredentials(page, actionParams, agentContext);

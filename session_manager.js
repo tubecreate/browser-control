@@ -391,6 +391,44 @@ async loadBlacklist() {
 
 
   /**
+   * Record a page visit to the profile's history
+   */
+  async recordPageVisit(url, title) {
+    if (!this.profileName || !url || url === 'about:blank') return;
+    try {
+      const historyPath = path.resolve('./scraped_data', this.profileName, 'history.json');
+      await fs.ensureDir(path.dirname(historyPath));
+      let history = {};
+      if (await fs.pathExists(historyPath)) {
+        try { history = await fs.readJson(historyPath); } catch (e) { history = {}; }
+      }
+      if (!Array.isArray(history.scrapedArticles)) {
+        history.scrapedArticles = [];
+      }
+      
+      // Avoid immediate duplicate entries
+      const lastEntry = history.scrapedArticles[history.scrapedArticles.length - 1];
+      if (lastEntry && lastEntry.url === url) {
+          return; // Already recorded
+      }
+      
+      history.scrapedArticles.push({
+        title: title || 'Untitled',
+        url: url,
+        scrapedAt: new Date().toISOString(),
+        isScraped: false
+      });
+      
+      if (history.scrapedArticles.length > 500) {
+        history.scrapedArticles = history.scrapedArticles.slice(-500);
+      }
+      await fs.writeJson(historyPath, history, { spaces: 2 });
+    } catch (e) {
+      console.warn('[SessionManager] Failed to record page visit to history.json:', e.message);
+    }
+  }
+
+  /**
    * Scan page content to detect available elements (DYNAMIC - not domain-based)
    */
   async scanPageContent(page) {
@@ -509,6 +547,7 @@ async loadBlacklist() {
         }
         
         return {
+          title: document.title,
           isErrorPage,
           hasCaptcha,
           potentialPopups,

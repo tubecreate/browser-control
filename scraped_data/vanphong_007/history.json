@@ -1,0 +1,120 @@
+{
+  "scrapedArticles": [
+    {
+      "title": "[vanphong_007] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T04:40:21.352Z",
+      "isScraped": false
+    },
+    {
+      "title": "[vanphong_007] latest email communication news - Google Search",
+      "url": "https://www.google.com/search?q=latest+email+communication+news&sca_esv=a2755a786bd8ce70&sxsrf=ANbL-n52wMJnsYw0sAOKtmlyf4MK_aa3aA%3A1772772019097&source=hp&ei=s1qqaczlA_rh0-kP_u7akQ8&iflsig=AFdpzrgAAAAAaapow5VoqhvAZrwoLBbw1s9bnER7QRUc&ved=0ahUKEwiMi9uzuoqTAxX68DQHHX63NvIQ4dUDCBg&uact=5&oq=latest+email+communication+news&gs_lp=Egdnd3Mtd2l6Ih9sYXRlc3QgZW1haWwgY29tbXVuaWNhdGlvbiBuZXdzMgUQIRigATIFECEYnwUyBRAhGJ8FSPwgUABY8xtwAHgAkAEAmAGCA6ABsi2qAQgwLjI1LjUuMrgBA8gBAPgBAZgCIKACmC7CAgcQABiABBgTwgIIEAAYgAQYywHCAgsQABiABBjHAxjLAcICBhAAGBYYHsICCBAAGIAEGKIEwgIFEAAY7wXCAgcQIRigARgKwgIKEAAYCBgKGA0YHpgDAJIHCDAuMjMuNy4yoAf0Y7IHCDAuMjMuNy4yuAeYLsIHBjQuMjAuOMgHSYAIAA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T04:40:33.358Z",
+      "isScraped": false
+    },
+    {
+      "title": "Malicious email attacks increase by 15% in 2025",
+      "url": "https://news.laodong.vn/cong-nghe/tan-cong-qua-email-doc-hai-tang-15-trong-nam-2025-1659650.ldo",
+      "scrapedAt": "2026-03-06T04:42:09.555Z",
+      "isScraped": true,
+      "imageCount": 3,
+      "contentLength": 3233
+    },
+    {
+      "title": "Largest star in the universe causes controversy about evolutionary state",
+      "url": "https://news.laodong.vn/cong-nghe/ngoi-sao-lon-nhat-vu-tru-gay-tranh-cai-ve-trang-thai-tien-hoa-1659564.ldo",
+      "author": "",
+      "imageCount": 2,
+      "contentLength": 2191,
+      "scrapedAt": "2026-03-06T04:42:51.797Z",
+      "isScraped": true
+    },
+    {
+      "title": "NASA brings astronaut back early due to space medical incident",
+      "url": "https://news.laodong.vn/the-gioi/nasa-dua-phi-hanh-gia-tro-ve-som-vi-su-co-y-te-vu-tru-1638153.ldo",
+      "author": "",
+      "imageCount": 2,
+      "contentLength": 3166,
+      "scrapedAt": "2026-03-06T04:43:42.477Z",
+      "isScraped": true
+    },
+    {
+      "title": "[vanphong_007] Russia speaks out about request for weapons support from Iran",
+      "url": "https://news.laodong.vn/the-gioi/nga-len-tieng-ve-yeu-cau-ho-tro-vu-khi-tu-iran-1664544.ldo",
+      "scrapedAt": "2026-03-06T04:44:47.538Z",
+      "isScraped": false
+    },
+    {
+      "title": "Oil tanker explodes in Persian Gulf amid US sinking Iranian warship",
+      "url": "https://news.laodong.vn/the-gioi/no-tau-cho-dau-o-vinh-ba-tu-giua-luc-my-danh-chim-tau-chien-iran-1664166.ldo",
+      "author": "",
+      "imageCount": 2,
+      "contentLength": 1892,
+      "scrapedAt": "2026-03-06T04:45:19.087Z",
+      "isScraped": true
+    },
+    {
+      "title": "US deploys 12 warships, ready to escort oil tankers through the Strait of Hormuz",
+      "url": "https://news.laodong.vn/the-gioi/my-dieu-12-tau-chien-san-sang-ho-tong-cac-tau-cho-dau-qua-eo-bien-hormuz-1663639.ldo",
+      "author": "",
+      "imageCount": 2,
+      "contentLength": 2172,
+      "scrapedAt": "2026-03-06T04:45:51.652Z",
+      "isScraped": true
+    },
+    {
+      "title": "Oil tanker paralyzed in the Strait of Hormuz, Russia warns of global oil shock",
+      "url": "https://news.laodong.vn/the-gioi/tau-cho-dau-te-liet-o-eo-bien-hormuz-nga-canh-bao-cu-soc-dau-toan-cau-1662491.ldo",
+      "author": "",
+      "imageCount": 3,
+      "contentLength": 3416,
+      "scrapedAt": "2026-03-06T04:46:17.071Z",
+      "isScraped": true
+    },
+    {
+      "title": "Oil tanker raided near the Strait of Hormuz amid escalating conflict",
+      "url": "https://news.laodong.vn/the-gioi/tau-cho-dau-bi-tap-kich-gan-eo-bien-hormuz-giua-luc-xung-dot-leo-thang-1662324.ldo",
+      "author": "",
+      "imageCount": 2,
+      "contentLength": 2480,
+      "scrapedAt": "2026-03-06T04:47:23.718Z",
+      "isScraped": true
+    },
+    {
+      "title": "CIA monitors Iranian Supreme Leader Khamenei for months, provides coordinates to Israel",
+      "url": "https://news.laodong.vn/the-gioi/cia-theo-doi-lanh-tu-toi-cao-iran-khamenei-nhieu-thang-cung-cap-toa-do-cho-israel-1662223.ldo",
+      "author": "",
+      "imageCount": 2,
+      "contentLength": 3431,
+      "scrapedAt": "2026-03-06T04:48:13.042Z",
+      "isScraped": true
+    },
+    {
+      "title": "Iranian Supreme Leader Ali Khamenei passes away, 5 bright candidates to succeed",
+      "url": "https://news.laodong.vn/the-gioi/lanh-tu-toi-cao-iran-ali-khamenei-qua-doi-5-ung-vien-sang-gia-ke-nhiem-1662107.ldo",
+      "author": "",
+      "imageCount": 2,
+      "contentLength": 3410,
+      "scrapedAt": "2026-03-06T04:48:56.782Z",
+      "isScraped": true
+    },
+    {
+      "title": "Iran confirms Supreme Leader Ali Khamenei's death, national mourning for 40 days",
+      "url": "https://news.laodong.vn/the-gioi/iran-xac-nhan-lanh-tu-toi-cao-ali-khamenei-qua-doi-quoc-tang-40-ngay-1662078.ldo",
+      "author": "",
+      "imageCount": 2,
+      "contentLength": 1825,
+      "scrapedAt": "2026-03-06T04:49:44.682Z",
+      "isScraped": true
+    },
+    {
+      "title": "Hormuz Strait paralyzed after Iran airstrike, oil prices jump more than 8%",
+      "url": "https://news.laodong.vn/the-gioi/eo-bien-hormuz-te-liet-sau-khong-kich-iran-gia-dau-bat-tang-hon-8-1662052.ldo",
+      "author": "",
+      "imageCount": 2,
+      "contentLength": 3229,
+      "scrapedAt": "2026-03-06T04:50:26.208Z",
+      "isScraped": true
+    }
+  ]
+}

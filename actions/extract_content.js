@@ -39,11 +39,18 @@ export async function extract_content(page, params = {}) {
   const {
     profileName = 'default',
     minImageWidth = 200,
-    maxImages = 10
+    maxImages = 10,
+    enable_scraping = true,
+    scraper_text_limit = 10000
   } = params;
 
   const currentUrl = page.url();
   console.log(`[EXTRACT_CONTENT] Starting extraction on: ${currentUrl}`);
+
+  if (enable_scraping === false) {
+      console.log(`[EXTRACT_CONTENT] ⛔ Web scraping is disabled for this agent. Skipping extraction.`);
+      return null;
+  }
 
   try {
     // ═══════════════════════════════════════════
@@ -91,7 +98,7 @@ export async function extract_content(page, params = {}) {
     // 2. EXTRACT article metadata & content
     // ═══════════════════════════════════════════
     const articleData = await page.evaluate((opts) => {
-      const { minImageWidth } = opts;
+      const { minImageWidth, textLimit } = opts;
 
       // --- Title ---
       const ogTitle = document.querySelector('meta[property="og:title"]')?.content;
@@ -159,9 +166,9 @@ export async function extract_content(page, params = {}) {
         }
       }
 
-      // Limit content to ~10000 chars to avoid excessive storage
-      if (content.length > 10000) {
-        content = content.substring(0, 10000) + '\n\n[... truncated]';
+      // Limit content to configured limit to avoid excessive storage
+      if (textLimit > 0 && content.length > textLimit) {
+        content = content.substring(0, textLimit) + '\n\n[... truncated]';
       }
 
       // --- Images (only descriptive/content images, not logos/thumbnails) ---
@@ -221,7 +228,7 @@ export async function extract_content(page, params = {}) {
         content,
         images
       };
-    }, { minImageWidth });
+    }, { minImageWidth, textLimit: scraper_text_limit });
 
     if (!articleData.content || articleData.content.length < 100) {
       console.log(`[EXTRACT_CONTENT] Content too short (${articleData.content?.length || 0} chars). Skipping save.`);
@@ -341,10 +348,7 @@ export async function extract_content(page, params = {}) {
     // ═══════════════════════════════════════════
     // 6. ALSO SAVE to profile history.json
     // ═══════════════════════════════════════════
-    // Declare alreadyExists outside if not already for scope, but we use a try/catch above so we just recheck
     try {
-      // Re-read or just check if we should skip
-      // To strictly avoid history duplicates even if articles.json check somehow failed, check history too
       const historyPath = path.join(SCRAPED_DATA_DIR, profileName, 'history.json');
       let history = {};
       if (await fs.pathExists(historyPath)) {
@@ -355,28 +359,30 @@ export async function extract_content(page, params = {}) {
         history.scrapedArticles = [];
       }
 
-      // Final deduplication check for history
-      if (!history.scrapedArticles.some(a => a.url === currentUrl)) {
-        // Save a lighter version to history (no full content, just metadata)
+      const existingIdx = history.scrapedArticles.findIndex(a => a.url === currentUrl);
+      if (existingIdx === -1) {
         history.scrapedArticles.push({
           title: result.title,
           url: result.url,
           author: result.author,
           imageCount: result.imageCount,
           contentLength: result.content.length,
-          scrapedAt: result.scrapedAt
+          scrapedAt: result.scrapedAt,
+          isScraped: true
         });
-
-        // Keep max 200 entries in history
-        if (history.scrapedArticles.length > 200) {
-          history.scrapedArticles = history.scrapedArticles.slice(-200);
-        }
-
-        await fs.writeJson(historyPath, history, { spaces: 2 });
-        console.log(`[EXTRACT_CONTENT] 📋 Updated history.json (${history.scrapedArticles.length} articles tracked)`);
       } else {
-        console.log(`[EXTRACT_CONTENT] 📋 Skipping history.json update (URL already exists)`);
+        history.scrapedArticles[existingIdx].isScraped = true;
+        history.scrapedArticles[existingIdx].imageCount = result.imageCount;
+        history.scrapedArticles[existingIdx].contentLength = result.content.length;
+        history.scrapedArticles[existingIdx].scrapedAt = result.scrapedAt;
       }
+
+      if (history.scrapedArticles.length > 500) {
+        history.scrapedArticles = history.scrapedArticles.slice(-500);
+      }
+
+      await fs.writeJson(historyPath, history, { spaces: 2 });
+      console.log(`[EXTRACT_CONTENT] 📋 Updated history.json (${history.scrapedArticles.length} articles tracked)`);
     } catch (e) {
       console.warn(`[EXTRACT_CONTENT] Failed to update history: ${e.message}`);
     }

@@ -1,0 +1,24 @@
+{
+  "scrapedArticles": [
+    {
+      "title": "[luat_su_004] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T03:18:54.328Z",
+      "isScraped": false
+    },
+    {
+      "title": "[luat_su_004] contract law case study - Google Search",
+      "url": "https://www.google.com/search?q=contract+law+case+study&sca_esv=a2755a786bd8ce70&sxsrf=ANbL-n6untKZI0CUbPHO-pf6ZPqhI5mq6A%3A1772767132059&source=hp&ei=m0eqaZibOtik2roP86j64AU&iflsig=AFdpzrgAAAAAaapVrFKMTCw0npwfPYr54kCkjMaADF3f&ved=0ahUKEwjY1K2ZqIqTAxVYklYBHXOUHlwQ4dUDCB4&uact=5&oq=contract+law+case+study&gs_lp=Egdnd3Mtd2l6Ihdjb250cmFjdCBsYXcgY2FzZSBzdHVkeTIIEAAYgAQYywEyCBAAGIAEGMsBMgYQABgWGB4yBhAAGBYYHjIGEAAYFhgeMgYQABgWGB4yBhAAGBYYHjIGEAAYFhgeMgYQABgWGB4yBhAAGBYYHkiMGFATWPQScAF4AJABApgBqQKgAYAgqgEGMC4xNy42uAEDyAEA-AEBmAIWoAKbHKgCA8ICBxAjGCcY6gLCAgoQABgDGOoCGI8BwgIHEAAYgAQYE8ICDRAAGIAEGMsBGEYY-QGYAwPxBQrqtYTiTz5LkgcGMS4xNy40oAeXhgGyBwYwLjE3LjS4B5ccwgcGOS4xMi4xyAcggAgA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T03:19:05.060Z",
+      "isScraped": false
+    },
+    {
+      "title": "Case Study on Contract Law (LAW 101): Assignment, Formation & Invalidity - Studocu",
+      "url": "https://www.studocu.vn/vn/document/truong-dai-hoc-kinh-te-luat-dai-hoc-quoc-gia-thanh-pho-ho-chi-minh/luat-hop-dong/in-case-study-on-contract-law/122131709",
+      "scrapedAt": "2026-03-06T03:19:59.958Z",
+      "isScraped": true,
+      "imageCount": 9,
+      "contentLength": 847
+    }
+  ]
+}

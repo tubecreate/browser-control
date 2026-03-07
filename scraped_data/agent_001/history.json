@@ -31,6 +31,84 @@
       "imageCount": 1,
       "contentLength": 4235,
       "scrapedAt": "2026-03-02T05:04:33.186Z"
+    },
+    {
+      "title": "[agent_001] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T03:01:28.753Z",
+      "isScraped": false
+    },
+    {
+      "title": "[agent_001] dashboard creation tutorial for professionals - Google Search",
+      "url": "https://www.google.com/search?q=dashboard+creation+tutorial+for+professionals&sca_esv=9372be5cbdbb118e&sxsrf=ANbL-n6I6eSY0B0Z_v6_cBANyiHlLD8wBg%3A1772766086683&source=hp&ei=hkOqaYHhJ8Xe2roP7vW3wQk&iflsig=AFdpzrgAAAAAaapRlhEpL_wIveGY27uBEMPoKAZTuLGJ&ved=0ahUKEwiBvPWmpIqTAxVFr1YBHe76LZgQ4dUDCB4&uact=5&oq=dashboard+creation+tutorial+for+professionals&gs_lp=Egdnd3Mtd2l6Ii1kYXNoYm9hcmQgY3JlYXRpb24gdHV0b3JpYWwgZm9yIHByb2Zlc3Npb25hbHMyBRAAGO8FMgUQABjvBTIFEAAY7wUyBRAAGO8FMgUQABjvBUieK1AAWNAmcAB4AJABAZgBvwKgAd47qgEJMC4zMi4xMC4xuAEDyAEA-AEBmAIqoALnOsICBxAAGIAEGBPCAgQQIxgnwgIIEAAYgAQYywHCAgYQABgWGB7CAgUQIRigAcICBRAhGJ8FwgIEECEYFZgDAJIHCDAuMzIuOC4yoAfaggKyBwgwLjMyLjguMrgH5zrCBwcxNS4yMy40yAc6gAgA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T03:01:42.127Z",
+      "isScraped": false
+    },
+    {
+      "title": "(3453) Excel Dashboard Tutorial: From Scratch to Professional Report with Tim Vipond - YouTube",
+      "url": "https://www.youtube.com/watch?v=-itbxR2fTjY",
+      "scrapedAt": "2026-03-06T03:02:48.233Z",
+      "isScraped": false
+    },
+    {
+      "title": "(3453) Introduction to Pivot Tables, Charts, and Dashboards in Excel (Part 1) - YouTube",
+      "url": "https://www.youtube.com/watch?v=9NUjHBNWe9M",
+      "scrapedAt": "2026-03-06T03:03:35.556Z",
+      "isScraped": false
+    },
+    {
+      "title": "(3453) 'Dashboard Creation tutorial for professionals' - YouTube",
+      "url": "https://www.youtube.com/results?search_query=%27Dashboard+Creation+tutorial+for+professionals%27",
+      "scrapedAt": "2026-03-06T03:04:19.002Z",
+      "isScraped": false
+    },
+    {
+      "title": "(3453) The Microsoft Excel Dashboard Masterclass - Don't Miss It Part-1 - YouTube",
+      "url": "https://www.youtube.com/watch?v=VxOOt2dP8Jw&list=PLwIcJx1aSL1Qx739cQXD8R70bzVIBX6gZ",
+      "scrapedAt": "2026-03-06T03:05:16.483Z",
+      "isScraped": false
+    },
+    {
+      "title": "(3453) YouTube",
+      "url": "https://www.youtube.com/",
+      "scrapedAt": "2026-03-06T03:06:06.294Z",
+      "isScraped": false
+    },
+    {
+      "title": "(3453) Excel Tutorial for Beginners - Microsoft excel formulas | Excel Formulas - YouTube",
+      "url": "https://www.youtube.com/watch?v=Hd6C6hZwbGA",
+      "scrapedAt": "2026-03-06T03:07:25.321Z",
+      "isScraped": false
+    },
+    {
+      "title": "(3453) YouTube",
+      "url": "https://www.youtube.com/",
+      "scrapedAt": "2026-03-06T03:08:14.552Z",
+      "isScraped": false
+    },
+    {
+      "title": "[agent_001] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T03:09:06.418Z",
+      "isScraped": false
+    },
+    {
+      "title": "[agent_001] About Google: Our products, technology and company information - About Google",
+      "url": "https://about.google/?utm_source=google-VN&utm_medium=referral&utm_campaign=hp-footer&fg=1",
+      "scrapedAt": "2026-03-06T03:09:53.477Z",
+      "isScraped": false
+    },
+    {
+      "title": "[agent_001] Google's products and services - About Google",
+      "url": "https://about.google/products/?utm_source=about.google&utm_medium=referral&utm_campaign=homepage",
+      "scrapedAt": "2026-03-06T03:10:26.235Z",
+      "isScraped": false
+    },
+    {
+      "title": "[agent_001] Circle to Search",
+      "url": "https://search.google/ways-to-search/circle-to-search/?utm_source=about.google&utm_medium=referral&utm_campaign=productspage",
+      "scrapedAt": "2026-03-06T03:11:22.649Z",
+      "isScraped": false
     }
   ]
 }

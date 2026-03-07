@@ -47,6 +47,72 @@
       "imageCount": 1,
       "contentLength": 3746,
       "scrapedAt": "2026-03-02T10:22:39.294Z"
+    },
+    {
+      "title": "[agent_004] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T04:46:54.777Z",
+      "isScraped": false
+    },
+    {
+      "title": "[agent_004] latest dashboard creation news - Google Search",
+      "url": "https://www.google.com/search?q=latest+dashboard+creation+news&sca_esv=a2755a786bd8ce70&sxsrf=ANbL-n7vFXzWe8hvm5SVcdLk6bSc95hXIQ%3A1772772412831&source=hp&ei=PFyqaa_yMN2_0-kPg5-kwQE&iflsig=AFdpzrgAAAAAaapqTFOLFL9pyg_fczEzX7Q9CeRLhCcG&ved=0ahUKEwivgLvvu4qTAxXd3zQHHYMPKRgQ4dUDCB4&uact=5&oq=latest+dashboard+creation+news&gs_lp=Egdnd3Mtd2l6Ih5sYXRlc3QgZGFzaGJvYXJkIGNyZWF0aW9uIG5ld3MyBRAhGKABMgUQIRigAUjcIFBIWIkccAF4AJABAJgB2wKgAZwoqgEIMC4yNC41LjG4AQPIAQD4AQGYAh-gAvIpqAIHwgIKEAAYAxiPARjqAsICChAuGAMYjwEY6gLCAgcQABiABBgTwgINEAAYgAQYywEYRhj5AcICCBAAGIAEGMsBwgIGEAAYFhgewgIFEAAY7wXCAgQQIRgVwgIFECEYnwWYAwfxBQC4be370UNfkgcIMS4yMy42LjGgB8yQAbIHCDAuMjMuNi4xuAfqKcIHCTAuMTIuMTUuNMgHgAGACAA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T04:47:05.317Z",
+      "isScraped": false
+    },
+    {
+      "title": "[agent_004] Creating a Custom Weather Card for the new Dashboard Design - EP3 - YouTube",
+      "url": "https://www.youtube.com/watch?v=e46uvItQerY",
+      "scrapedAt": "2026-03-06T04:47:10.064Z",
+      "isScraped": false
+    },
+    {
+      "title": "[agent_004] 'latest Dashboard Creation news' - Google Search",
+      "url": "https://www.google.com/search?q=%27latest+Dashboard+Creation+news%27&sca_esv=a2755a786bd8ce70&sxsrf=ANbL-n6EdhhCOFUEHNoJRcItte5uKp8zkA%3A1772772569035&source=hp&ei=2FyqaZfyPPSl2roP7Nm9-Aw&iflsig=AFdpzrgAAAAAaapq6Q0-yhe_da4OmRCZ_b0OH8ERu6ci&ved=0ahUKEwiXvvi5vIqTAxX0klYBHexsD88Q4dUDCB4&uact=5&oq=%27latest+Dashboard+Creation+news%27&gs_lp=Egdnd3Mtd2l6IiAnbGF0ZXN0IERhc2hib2FyZCBDcmVhdGlvbiBuZXdzJzIFECEYoAEyBRAhGKABMgUQIRigAUjvIFAlWO4bcAF4AJABAJgBwgKgAactqgEIMC4yNC41LjO4AQPIAQD4AQGYAiCgAqEuqAIKwgIHECMYJxjqAsICChAAGAMY6gIYjwHCAgoQLhgDGOoCGI8BwgIEECMYJ8ICCxAAGIAEGJECGIoFwgIIEAAYgAQYsQPCAgUQABiABMICERAuGIAEGLEDGNEDGIMBGMcBwgILEAAYgAQYsQMYgwHCAhEQLhiABBixAxjRAxjHARiKBcICCxAAGIAEGLEDGIoFwgIQEAAYgAQYsQMYQxiDARiKBcICChAAGIAEGEMYigXCAggQLhiABBixA8ICBBAAGAPCAgoQABiABBgUGIcCwgIGEAAYFhgewgIIEAAYFhgKGB7CAgsQABiABBiGAxiKBcICCBAAGKIEGIkFwgIIEAAYgAQYogTCAgUQABjvBZgDBvEFY2-qvGXqHtmSBwgxLjIzLjUuM6AH9s4BsgcIMC4yMy41LjO4B5suwgcIMS45LjE1LjfIB60BgAgA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T04:50:12.991Z",
+      "isScraped": false
+    },
+    {
+      "title": "Creating a Custom Weather Card for the new Dashboard Design - EP3 - YouTube",
+      "url": "https://www.youtube.com/watch?v=e46uvItQerY",
+      "scrapedAt": "2026-03-06T04:50:56.528Z",
+      "isScraped": false
+    },
+    {
+      "title": "latest Dashboard Creation news - YouTube",
+      "url": "https://www.youtube.com/results?search_query=latest+Dashboard+Creation+news",
+      "scrapedAt": "2026-03-06T04:52:17.477Z",
+      "isScraped": false
+    },
+    {
+      "title": "Master Datadog Monitoring: Agent Installation + Dashboard Creation (Hands-on Demo) - YouTube",
+      "url": "https://www.youtube.com/watch?v=tFvgd4Pni7s",
+      "scrapedAt": "2026-03-06T04:53:01.561Z",
+      "isScraped": false
+    },
+    {
+      "title": "Dashboard Creation latest news - YouTube",
+      "url": "https://www.youtube.com/results?search_query=Dashboard+Creation+latest+news",
+      "scrapedAt": "2026-03-06T04:54:53.763Z",
+      "isScraped": false
+    },
+    {
+      "title": "The Microsoft Excel Dashboard Masterclass - Don't Miss It Part-1 - YouTube",
+      "url": "https://www.youtube.com/watch?v=VxOOt2dP8Jw&list=PLwIcJx1aSL1Qx739cQXD8R70bzVIBX6gZ",
+      "scrapedAt": "2026-03-06T04:55:23.056Z",
+      "isScraped": false
+    },
+    {
+      "title": "YouTube",
+      "url": "https://www.youtube.com/",
+      "scrapedAt": "2026-03-06T04:55:51.649Z",
+      "isScraped": false
+    },
+    {
+      "title": "latest Dashboard Creation news - YouTube",
+      "url": "https://www.youtube.com/results?search_query=latest+Dashboard+Creation+news",
+      "scrapedAt": "2026-03-06T04:56:34.783Z",
+      "isScraped": false
     }
   ]
 }

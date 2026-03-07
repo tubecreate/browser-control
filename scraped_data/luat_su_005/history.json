@@ -1,0 +1,50 @@
+{
+  "scrapedArticles": [
+    {
+      "title": "[luat_su_005] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T04:59:58.767Z",
+      "isScraped": false
+    },
+    {
+      "title": "[luat_su_005] family law case study - Google Search",
+      "url": "https://www.google.com/search?q=family+law+case+study&sca_esv=a2755a786bd8ce70&sxsrf=ANbL-n4ApubeTg52Zqzbmma2Eb12TIv_Cg%3A1772773196860&source=hp&ei=TF-qacSyMvTn2roPxqLbyAQ&iflsig=AFdpzrgAAAAAaaptXGefEAPYujBnSvoN8nwXNXgQl5vD&ved=0ahUKEwjEiKjlvoqTAxX0s1YBHUbRFkkQ4dUDCB4&uact=5&oq=family+law+case+study&gs_lp=Egdnd3Mtd2l6IhVmYW1pbHkgbGF3IGNhc2Ugc3R1ZHkyCBAAGIAEGMsBMgYQABgWGB4yBhAAGBYYHjIFEAAY7wUyBRAAGO8FMgUQABjvBTIFEAAY7wVIjBlQIFiWFHABeACQAQCYAcwCoAHcHKoBCDAuMTUuMi4zuAEDyAEA-AEBmAIVoALUHagCBcICChAAGAMY6gIYjwHCAgcQABiABBgTmAMF8QXhfLM-jJv2MpIHCDEuMTUuMi4zoAfpbbIHCDAuMTUuMi4zuAfPHcIHCDAuNC4xNC4zyAdrgAgA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T05:00:07.412Z",
+      "isScraped": false
+    },
+    {
+      "title": "[luat_su_005] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T05:00:33.777Z",
+      "isScraped": false
+    },
+    {
+      "title": "[luat_su_005] About Google: Our products, technology and company information - About Google",
+      "url": "https://about.google/?utm_source=google-VN&utm_medium=referral&utm_campaign=hp-footer&fg=1",
+      "scrapedAt": "2026-03-06T05:03:06.239Z",
+      "isScraped": true,
+      "imageCount": 2,
+      "contentLength": 477
+    },
+    {
+      "title": "[luat_su_005] Google's products and services - About Google",
+      "url": "https://about.google/products/?utm_source=about.google&utm_medium=referral&utm_campaign=homepage",
+      "scrapedAt": "2026-03-06T05:05:37.454Z",
+      "isScraped": true,
+      "imageCount": 4,
+      "contentLength": 627
+    },
+    {
+      "title": "[luat_su_005] Circle to Search",
+      "url": "https://search.google/ways-to-search/circle-to-search/?utm_source=about.google&utm_medium=referral&utm_campaign=productspage",
+      "scrapedAt": "2026-03-06T05:07:40.403Z",
+      "isScraped": false
+    },
+    {
+      "title": "[luat_su_005] Home",
+      "url": "https://search.google/",
+      "scrapedAt": "2026-03-06T05:09:51.383Z",
+      "isScraped": false
+    }
+  ]
+}

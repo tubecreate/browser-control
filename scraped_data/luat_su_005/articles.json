@@ -1,0 +1,56 @@
+[
+  {
+    "title": "About Google: Our products, technology and company information",
+    "url": "https://about.google/?utm_source=google-VN&utm_medium=referral&utm_campaign=hp-footer&fg=1",
+    "description": "Learn more about Google. Explore our innovative AI products and services, and discover how we're using technology to help improve lives around the world.",
+    "author": "",
+    "publishedDate": "",
+    "content": "Our latest image generation model delivers vibrant lighting, sharp text and real-world knowledge so you can make high-quality images at lightning speed.\n\nExplore our products and features across Search, Google Workspace and more\n\nLearn all about our leading AI models — and discover their capabilities\n\nSee how we’re tackling some of the most challenging problems in computer science\n\nSign up to receive top stories from the week — from product announcements, to everyday tips.",
+    "images": [
+      {
+        "url": "https://www.gstatic.com/marketing-cms/assets/images/fd/18/711e661746beb26b2533f9092dc4/about-homepage-ss.png=n-w1440-h810-fcrop64=1,0000114effffee75-rw",
+        "alt": "Featured image",
+        "localPath": "C:\\tubecreate-vue\\python-video-studio\\browser-laucher\\scraped_data\\luat_su_005\\images\\1772773385169\\img_0.jpg"
+      },
+      {
+        "url": "https://www.gstatic.com/marketing-cms/assets/images/62/05/caa64eda4e58a6ed23b5722a8e39/android-3up.webp=n-w610-h407-fcrop64=1,0e2b0000f1d5ffff-rw",
+        "alt": "Mobile UI mockups illustrating new updates on Android. ",
+        "localPath": "C:\\tubecreate-vue\\python-video-studio\\browser-laucher\\scraped_data\\luat_su_005\\images\\1772773385169\\img_1.jpg"
+      }
+    ],
+    "imageCount": 2,
+    "scrapedAt": "2026-03-06T05:03:06.239Z"
+  },
+  {
+    "title": "Google's products and services",
+    "url": "https://about.google/products/?utm_source=about.google&utm_medium=referral&utm_campaign=homepage",
+    "description": "Explore Google's helpful products and services, including Android, Gemini, Pixel and Search.",
+    "author": "",
+    "publishedDate": "",
+    "content": "Accessibility support\n\nCheck out a whole world of devices that work better together, plus AI features to help throughout your day.\n\nSee the latest Pixel lineup — from phones and watches, to earbuds and tablets.\n\nCreate cinematic clips, scenes and stories with our AI filmmaking tool.\n\nYour personalized AI research assistant, right at your fingertips.\n\nExplore AI experiments from across the company.\n\nGOOGLE WORKSPACE WITH GEMINI\n\nCars with Google built-in\n\nChromebook and ChromeOS\n\nGoogle Arts & Culture\n\nGoogle Marketing Platform\n\nGoogle Search Console\n\nGoogle for Developers\n\nGoogle Identity Platform\n\nInteractive Media Ads",
+    "images": [
+      {
+        "url": "https://www.gstatic.com/marketing-cms/assets/images/2f/db/447abf5f4a1fb4b2dcee43c28fd3/hero-final.png=n-w2088-h700-fcrop64=1,27bc0000d844ffff-rw",
+        "alt": "Featured image",
+        "localPath": "C:\\tubecreate-vue\\python-video-studio\\browser-laucher\\scraped_data\\luat_su_005\\images\\1772773536231\\img_0.jpg"
+      },
+      {
+        "url": "https://www.gstatic.com/marketing-cms/assets/images/2f/db/447abf5f4a1fb4b2dcee43c28fd3/hero-final.png=n-w2500-h838-fcrop64=1,00000000ffffffff-rw",
+        "alt": "Three Pixel phones in different colors — gray-ish white, blue and lemongrass — are shown side by side.",
+        "localPath": "C:\\tubecreate-vue\\python-video-studio\\browser-laucher\\scraped_data\\luat_su_005\\images\\1772773536231\\img_1.jpg"
+      },
+      {
+        "url": "https://www.gstatic.com/marketing-cms/assets/images/a1/5d/c2ed00da4ff9856bc23674e0dde2/android.png=n-w543-h305-fcrop64=1,00000000ffffff6e-rw",
+        "alt": "An assortment of Android devices, including phones and a smartwatch. A tablet displays the Quick Share feature, showing a photo of a group of friends.",
+        "localPath": "C:\\tubecreate-vue\\python-video-studio\\browser-laucher\\scraped_data\\luat_su_005\\images\\1772773536231\\img_2.jpg"
+      },
+      {
+        "url": "https://www.gstatic.com/marketing-cms/assets/images/3d/36/24ba043e4c1eb5e6ed47dac2a39f/nblm.png=n-w543-h965-fcrop64=1,00001400ffffebdd-rw",
+        "alt": "A screen showing an \"Upload sources\" prompt for “LIT 300 Joyse,” \"Ulysses Notes\" and \"Ulysses by James Joyce.\"",
+        "localPath": "C:\\tubecreate-vue\\python-video-studio\\browser-laucher\\scraped_data\\luat_su_005\\images\\1772773536231\\img_3.jpg"
+      }
+    ],
+    "imageCount": 4,
+    "scrapedAt": "2026-03-06T05:05:37.454Z"
+  }
+]

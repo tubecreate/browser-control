@@ -638,5 +638,32 @@
     "images": [],
     "imageCount": 0,
     "scrapedAt": "2026-03-02T09:59:23.862Z"
+  },
+  {
+    "title": "About Google: Our products, technology and company information",
+    "url": "https://about.google/?utm_source=google-VN&utm_medium=referral&utm_campaign=hp-footer&fg=1",
+    "description": "Learn more about Google. Explore our innovative AI products and services, and discover how we're using technology to help improve lives around the world.",
+    "author": "",
+    "publishedDate": "",
+    "content": "Our latest image generation model delivers vibrant lighting, sharp text and real-world knowledge so you can make high-quality images at lightning speed.\n\nExplore our products and features across Search, Google Workspace and more\n\nLearn all about our leading AI models — and discover their capabilities\n\nSee how we’re tackling some of the most challenging problems in computer science\n\nLink to Youtube Video (visible only when JS is disabled)\n\nSign up to receive top stories from the week — from product announcements, to everyday tips.",
+    "images": [
+      {
+        "url": "https://www.gstatic.com/marketing-cms/assets/images/fd/18/711e661746beb26b2533f9092dc4/about-homepage-ss.png=n-w1440-h810-fcrop64=1,0000114effffee75-rw",
+        "alt": "Featured image",
+        "localPath": "C:\\tubecreate-vue\\python-video-studio\\browser-laucher\\scraped_data\\003-007\\images\\1772449929361\\img_0.jpg"
+      },
+      {
+        "url": "https://www.gstatic.com/marketing-cms/assets/images/16/2b/869c343c4002944d3b7742fe0975/socks-lyria.webp=n-w531-h299-fcrop64=1,00230000ffddffff-rw",
+        "alt": "socks-lyria.webp",
+        "localPath": "C:\\tubecreate-vue\\python-video-studio\\browser-laucher\\scraped_data\\003-007\\images\\1772449929361\\img_1.jpg"
+      },
+      {
+        "url": "https://www.gstatic.com/marketing-cms/assets/images/79/89/5b98f56646aaa770a3d26ebda44d/10a.webp=n-w543-h306-fcrop64=1,0000006fffffff59-rw",
+        "alt": "10a.webp",
+        "localPath": "C:\\tubecreate-vue\\python-video-studio\\browser-laucher\\scraped_data\\003-007\\images\\1772449929361\\img_2.jpg"
+      }
+    ],
+    "imageCount": 3,
+    "scrapedAt": "2026-03-02T11:12:10.255Z"
   }
 ]

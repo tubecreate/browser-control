@@ -167,6 +167,446 @@
       "imageCount": 0,
       "contentLength": 1249,
       "scrapedAt": "2026-03-02T09:59:23.862Z"
+    },
+    {
+      "title": "About Google: Our products, technology and company information",
+      "url": "https://about.google/?utm_source=google-VN&utm_medium=referral&utm_campaign=hp-footer&fg=1",
+      "author": "",
+      "imageCount": 3,
+      "contentLength": 535,
+      "scrapedAt": "2026-03-02T11:12:10.255Z"
+    },
+    {
+      "title": "[003-007] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T03:03:00.416Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] outlook mail - Google Search",
+      "url": "https://www.google.com/search?q=outlook+mail&sca_esv=9372be5cbdbb118e&source=hp&ei=4kOqabO8JNKZvr0P75Gg-Q0&iflsig=AFdpzrgAAAAAaapR8g2zYQd5899ICnKhXXt3Ih-FEdGn&ved=0ahUKEwizteHSpIqTAxXSjK8BHe8IKN8Q4dUDCBQ&uact=5&oq=outlook+mail&gs_lp=Egdnd3Mtd2l6IgxvdXRsb29rIG1haWwyCxAAGIAEGJECGIoFMgsQABiABBiRAhiKBTILEAAYgAQYkQIYigUyCxAAGIAEGJECGIoFMgsQABiABBiRAhiKBTIHEAAYgAQYCjIFEAAYgAQyCRAAGIAEGAoYCzIFEAAYgAQyBRAAGIAESMsOUA1YywlwAHgAkAEAmAG9AqAB4hKqAQcwLjkuMS4zuAEDyAEA-AEBmAINoAL5EqgCCsICExAAGIAEGEMYtAIY5wYYigUY6gLCAh0QABiABBi0AhjUAxjlAhjnBhi3AxiKBRjqAhiKA8ICEBAAGIAEGLEDGEMYgwEYigXCAgoQABiABBhDGIoFwgIIEAAYgAQYsQPCAgsQLhiABBixAxiDAcICDRAAGIAEGLEDGEMYigXCAgQQLhgDwgIOEAAYgAQYsQMYgwEYigXCAgsQABiABBixAxiDAcICDxAAGIAEGLEDGIMBGAoYC5gDxALxBVOXM8UmRVe1kgcHMC45LjEuM6AHh0uyBwcwLjkuMS4zuAf5EsIHBTQuOC4xyAcTgAgA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T03:03:09.408Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Outlook",
+      "url": "https://outlook.live.com/mail/0/inbox",
+      "scrapedAt": "2026-03-06T03:03:14.142Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Microsoft Outlook Personal Email and Calendar | Microsoft 365",
+      "url": "https://www.microsoft.com/en-us/microsoft-365/outlook/email-and-calendar-software-microsoft-outlook?deeplink=%2Fmail%2F0%2Finbox&sdf=0",
+      "scrapedAt": "2026-03-06T03:03:55.183Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Data retention, deletion, and destruction in Microsoft 365 - Microsoft Service Assurance | Microsoft Learn",
+      "url": "https://learn.microsoft.com/en-us/compliance/assurance/assurance-data-retention-deletion-and-destruction-overview",
+      "scrapedAt": "2026-03-06T03:05:21.323Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Records management for documents and emails in Microsoft 365 | Microsoft Learn",
+      "url": "https://learn.microsoft.com/en-us/purview/records-management?source=recommendations",
+      "scrapedAt": "2026-03-06T03:06:24.798Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Manage records and disposition with Microsoft Purview - Training | Microsoft Learn",
+      "url": "https://learn.microsoft.com/en-us/training/modules/purview-manage-records/?source=recommendations",
+      "scrapedAt": "2026-03-06T03:08:07.270Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Exercise - Auto-apply retention label using a trainable classifier - Training | Microsoft Learn",
+      "url": "https://learn.microsoft.com/en-us/training/modules/purview-manage-records/exercise-create-auto-apply",
+      "scrapedAt": "2026-03-06T03:09:39.942Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Developer Program | Microsoft 365 Dev Center",
+      "url": "https://developer.microsoft.com/en-us/microsoft-365/dev-program",
+      "scrapedAt": "2026-03-06T03:10:46.489Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Microsoft 365 Copilot Connectors | Connect external data sources",
+      "url": "https://developer.microsoft.com/en-us/microsoft-365/copilot-connectors",
+      "scrapedAt": "2026-03-06T03:12:10.986Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T03:14:14.170Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] outlook mail - Google Search",
+      "url": "https://www.google.com/search?q=outlook+mail&sca_esv=9372be5cbdbb118e&source=hp&ei=hEaqab3wFpir0-kP6OXi0AM&iflsig=AFdpzrgAAAAAaapUlD85cjXpBWqSEsM-t0QWoJIePbL7&ved=0ahUKEwi9woWUp4qTAxWY1TQHHeiyGDoQ4dUDCBQ&uact=5&oq=outlook+mail&gs_lp=Egdnd3Mtd2l6IgxvdXRsb29rIG1haWwyCxAAGIAEGJECGIoFMgsQABiABBiRAhiKBTILEAAYgAQYkQIYigUyCxAAGIAEGJECGIoFMgsQABiABBiRAhiKBTIHEAAYgAQYCjIFEAAYgAQyCRAAGIAEGAoYCzIFEAAYgAQyBRAAGIAESO8NUBNYnwlwAHgAkAEBmAGsAqABoRKqAQcwLjkuMy4xuAEDyAEA-AEBmAIMoAKxEKgCAMICEBAAGIAEGLEDGEMYgwEYigXCAgoQABiABBhDGIoFwgIIEAAYgAQYsQPCAgsQLhiABBixAxiDAcICDRAAGIAEGLEDGEMYigXCAgQQLhgDwgIOEC4YgAQYsQMYgwEYigXCAgsQABiABBixAxiDAcICDxAAGIAEGLEDGIMBGAoYC5gDAJIHBzAuOS4yLjGgB4FNsgcHMC45LjIuMbgHsRDCBwUzLjYuM8gHGIAIAA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T03:14:22.270Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Outlook",
+      "url": "https://outlook.live.com/mail/0/inbox",
+      "scrapedAt": "2026-03-06T03:14:27.734Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Microsoft Outlook Personal Email and Calendar | Microsoft 365",
+      "url": "https://www.microsoft.com/en-us/microsoft-365/outlook/email-and-calendar-software-microsoft-outlook?deeplink=%2Fmail%2F0%2Finbox&sdf=0",
+      "scrapedAt": "2026-03-06T03:14:58.419Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Microsoft",
+      "url": "https://www.microsoft.com/software-development-companies/offers-benefits/isv-success?icid=DSM_All_SupportAIMarketplace&ocid=cmm3atxvn98",
+      "scrapedAt": "2026-03-06T03:15:37.773Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Microsoft",
+      "url": "https://www.microsoft.com/vi-vn/microsoft-365/outlook/email-and-calendar-software-microsoft-outlook",
+      "scrapedAt": "2026-03-06T03:17:02.678Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Google News",
+      "url": "https://news.google.com/home?hl=en-US&gl=US&ceid=US:en",
+      "scrapedAt": "2026-03-06T03:22:26.544Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T05:05:58.785Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] how to s&p 500 analysis - Google Search",
+      "url": "https://www.google.com/search?q=how+to+s%26p+500+analysis&sca_esv=a2755a786bd8ce70&source=hp&ei=tGCqaZf-G5qg0-kPr7zdqAo&iflsig=AFdpzrgAAAAAaapuxN-kkUCLP9mNXPWwkNh3W53kOJ_S&ved=0ahUKEwiXqOaQwIqTAxUa0DQHHS9eF6UQ4dUDCBQ&uact=5&oq=how+to+s%26p+500+analysis&gs_lp=Egdnd3Mtd2l6Ihdob3cgdG8gcyZwIDUwMCBhbmFseXNpczIGEAAYFhgeMgYQABgWGB4yBhAAGBYYHjIGEAAYFhgeMggQABgWGAoYHjIGEAAYFhgeMgUQABjvBTIFEAAY7wUyBRAAGO8FMgUQABjvBUilGFAcWJETcAB4AJABAJgBsAKgAaUeqgEIMC4xOC40LjG4AQPIAQD4AQGYAhegAuEeqAIKwgIKEC4YAxjqAhiPAcICChAAGAMY6gIYjwHCAgcQABiABBgTwgIIEAAYExgWGB6YA74B8QXcCjddC-osx5IHCDAuMTguNC4xoAeo1wGyBwgwLjE4LjQuMbgH4R7CBwgwLjIxLjEuMcgHMYAIAA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T05:06:08.009Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] S&P 500 Analysis: S&P 500 Continues to See Support at Same Place - YouTube",
+      "url": "https://www.youtube.com/watch?v=LFbxpaOrK2o",
+      "scrapedAt": "2026-03-06T05:06:12.210Z",
+      "isScraped": false
+    },
+    {
+      "title": "'how to S&P 500 analysis' AND site:www.google.com - YouTube",
+      "url": "https://www.youtube.com/results?search_query=%27how+to+S%26P+500+analysis%27+AND+site%3Awww.google.com",
+      "scrapedAt": "2026-03-06T05:09:22.304Z",
+      "isScraped": false
+    },
+    {
+      "title": "The Only Fundamental Analysis Video You Will Ever Need... (Full Course: Beginner to Advanced) - YouTube",
+      "url": "https://www.youtube.com/watch?v=8yDmq03XAHQ",
+      "scrapedAt": "2026-03-06T05:10:03.312Z",
+      "isScraped": false
+    },
+    {
+      "title": "YouTube",
+      "url": "https://www.youtube.com/",
+      "scrapedAt": "2026-03-06T05:10:38.393Z",
+      "isScraped": false
+    },
+    {
+      "title": "'how to S&P 500 analysis' - YouTube",
+      "url": "https://www.youtube.com/results?search_query=%27how+to+S%26P+500+analysis%27",
+      "scrapedAt": "2026-03-06T05:11:22.671Z",
+      "isScraped": false
+    },
+    {
+      "title": "S&P 500 Analysis: S&P 500 Continues to See Support at Same Place - YouTube",
+      "url": "https://www.youtube.com/watch?v=LFbxpaOrK2o",
+      "scrapedAt": "2026-03-06T05:12:22.820Z",
+      "isScraped": false
+    },
+    {
+      "title": "'S&P 500 analysis' AND 'article' - YouTube",
+      "url": "https://www.youtube.com/results?search_query=%27S%26P+500+analysis%27+AND+%27article%27",
+      "scrapedAt": "2026-03-06T05:14:51.600Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T05:17:01.918Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] how to s&p 500 analysis - Google Search",
+      "url": "https://www.google.com/search?q=how+to+s%26p+500+analysis&sca_esv=a2755a786bd8ce70&source=hp&ei=TGOqaYetBbCm2roP5Lr6gAQ&iflsig=AFdpzrgAAAAAaapxXHdIXUFEyMZQ1dD1B3KkSf-RTkE7&ved=0ahUKEwiHg5_NwoqTAxUwk1YBHWSdHkAQ4dUDCBQ&uact=5&oq=how+to+s%26p+500+analysis&gs_lp=Egdnd3Mtd2l6Ihdob3cgdG8gcyZwIDUwMCBhbmFseXNpczIGEAAYFhgeMgYQABgWGB4yBhAAGBYYHjIGEAAYFhgeMgYQABgWGB4yCBAAGBYYChgeMgYQABgWGB4yCxAAGIAEGIYDGIoFMggQABiABBiiBDIIEAAYgAQYogRIgxtQDljtFXAAeACQAQGYAccCoAGAIqoBCDAuMTguNC4yuAEDyAEA-AEBmAIXoAKIIKgCCsICHRAAGIAEGLQCGNQDGOUCGOcGGLcDGIoFGOoCGIoDwgILEAAYgAQYkQIYigXCAg4QABiABBixAxiDARiKBcICCxAAGIAEGLEDGIoFwgILEAAYgAQYsQMYgwHCAgUQABiABMICCBAuGIAEGLEDwgIREC4YgAQYsQMY0QMYgwEYxwHCAgoQABiABBhDGIoFwgIIEAAYgAQYsQPCAgUQLhiABMICBBAAGAPCAg4QLhiABBixAxiDARiKBZgD0QHxBVukQdgHRKyNkgcIMC4xNy40LjKgB5vBAbIHCDAuMTcuNC4yuAeIIMIHBjAuMTYuN8gHOIAIAA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T05:17:11.297Z",
+      "isScraped": false
+    },
+    {
+      "title": "S&P 500 Analysis: S&P 500 Continues to See Support at Same Place - YouTube",
+      "url": "https://www.youtube.com/watch?v=LFbxpaOrK2o",
+      "scrapedAt": "2026-03-06T05:17:16.100Z",
+      "isScraped": false
+    },
+    {
+      "title": "'how to S&P 500 analysis' NOT site:youtube.com - YouTube",
+      "url": "https://www.youtube.com/results?search_query=%27how+to+S%26P+500+analysis%27+NOT+site%3Ayoutube.com",
+      "scrapedAt": "2026-03-06T05:19:08.951Z",
+      "isScraped": false
+    },
+    {
+      "title": "😒STOCK MARKET CRASH? BUT VIX SAYS BEAR TRAP? SPY QQQ. IWM. Technical chart analysis. - YouTube",
+      "url": "https://www.youtube.com/watch?v=QHaIuKDPzTI",
+      "scrapedAt": "2026-03-06T05:19:36.010Z",
+      "isScraped": false
+    },
+    {
+      "title": "YouTube",
+      "url": "https://www.youtube.com/",
+      "scrapedAt": "2026-03-06T05:20:16.344Z",
+      "isScraped": false
+    },
+    {
+      "title": "Seafood 🦑🐙spicy food eating delicious.#shortvideo #viralshorts #eatshow #seafood #asmreating - YouTube",
+      "url": "https://www.youtube.com/shorts/c0auXfcBp7U",
+      "scrapedAt": "2026-03-06T05:20:47.297Z",
+      "isScraped": false
+    },
+    {
+      "title": "YouTube",
+      "url": "https://www.youtube.com/",
+      "scrapedAt": "2026-03-06T05:21:25.127Z",
+      "isScraped": false
+    },
+    {
+      "title": "Seafood 🦞🦑🐙spicy food eating delicious. #shorts #viralshorts #eatshow #seafood #asmreating - YouTube",
+      "url": "https://www.youtube.com/shorts/E8gnI1C05TQ",
+      "scrapedAt": "2026-03-06T05:21:49.625Z",
+      "isScraped": false
+    },
+    {
+      "title": "YouTube",
+      "url": "https://www.youtube.com/",
+      "scrapedAt": "2026-03-06T05:22:26.801Z",
+      "isScraped": false
+    },
+    {
+      "title": "Chú chó đáng thương nhảy lên lấy chiếc vòng trên cao #shorts - YouTube",
+      "url": "https://www.youtube.com/shorts/U77gt4URoNg",
+      "scrapedAt": "2026-03-06T05:24:13.048Z",
+      "isScraped": false
+    },
+    {
+      "title": "'S&P 500 analysis' - YouTube",
+      "url": "https://www.youtube.com/results?search_query=%27S%26P+500+analysis%27",
+      "scrapedAt": "2026-03-06T05:24:56.417Z",
+      "isScraped": false
+    },
+    {
+      "title": "Why SPX Recovery Could Hit Different This Time #stocks #elliottwave - YouTube",
+      "url": "https://www.youtube.com/shorts/MuOs39FIC4o",
+      "scrapedAt": "2026-03-06T05:26:00.245Z",
+      "isScraped": false
+    },
+    {
+      "title": "Elliott Wave Analysis SPX Targets Recovery in 3 Waves at Least - YouTube",
+      "url": "https://www.youtube.com/watch?v=v0LxmFhoZG8",
+      "scrapedAt": "2026-03-06T05:26:42.332Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T05:41:13.490Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] how to s&p 500 analysis - Google Search",
+      "url": "https://www.google.com/search?q=how+to+s%26p+500+analysis&sca_esv=c767783bbfe30d60&source=hp&ei=92iqadfQI8vo1e8PkpuS0Q8&iflsig=AFdpzrgAAAAAaap3BwI42nwus__kS1RKyg2dtyJ5ZExM&ved=0ahUKEwiXqK-ByIqTAxVLdPUHHZKNJPoQ4dUDCBQ&uact=5&oq=how+to+s%26p+500+analysis&gs_lp=Egdnd3Mtd2l6Ihdob3cgdG8gcyZwIDUwMCBhbmFseXNpczIGEAAYFhgeMgYQABgWGB4yBhAAGBYYHjIGEAAYFhgeMgYQABgWGB4yCBAAGBYYChgeMgYQABgWGB4yCxAAGIAEGIYDGIoFMggQABiABBiiBDIIEAAYgAQYogRIuRhQKVjgE3ABeACQAQCYAcwCoAHTHaoBCDAuMTguNC4xuAEDyAEA-AEBmAIYoAKJHqgCCsICHRAAGIAEGLQCGNQDGOUCGOcGGLcDGIoFGOoCGIoDwgILEAAYgAQYsQMYgwHCAg4QABiABBixAxiDARiKBcICCxAAGIAEGLEDGIoFwgIQEAAYgAQYsQMYgwEYigUYCsICBRAAGIAEwgIOEC4YgAQYsQMYgwEYigXCAgsQLhiABBjRAxjHAcICBBAAGAPCAgUQLhiABMICCxAAGIAEGJECGIoFmAMH8QVqanznZfTB_5IHCDEuMTguNC4xoAfOmgGyBwgwLjE4LjQuMbgHgR7CBwY1LjE4LjHIByyACAA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T05:41:24.416Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Understanding the S&P 500: How It's Calculated and Why It Matters",
+      "url": "https://www.investopedia.com/articles/investing/090414/sp-500-index-you-need-know.asp",
+      "scrapedAt": "2026-03-06T05:41:29.174Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] 401(k) Balances Hit a Record High in 2025—So Did Hardship Withdrawals",
+      "url": "https://www.investopedia.com/401-k-balances-hit-a-record-high-in-2025-so-did-hardship-withdrawals-11919452",
+      "scrapedAt": "2026-03-06T05:43:04.397Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Steps for a 401(k) Hardship Withdrawal: Eligibility and Tax Implications",
+      "url": "https://www.investopedia.com/retirement/relief-401k-hardship-withdrawals/",
+      "scrapedAt": "2026-03-06T05:43:29.801Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] 401(k) Balances Hit a Record High in 2025—So Did Hardship Withdrawals",
+      "url": "https://www.investopedia.com/401-k-balances-hit-a-record-high-in-2025-so-did-hardship-withdrawals-11919452",
+      "scrapedAt": "2026-03-06T05:44:39.177Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Steps for a 401(k) Hardship Withdrawal: Eligibility and Tax Implications",
+      "url": "https://www.investopedia.com/retirement/relief-401k-hardship-withdrawals/",
+      "scrapedAt": "2026-03-06T05:45:04.542Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] 401(k) Balances Hit a Record High in 2025—So Did Hardship Withdrawals",
+      "url": "https://www.investopedia.com/401-k-balances-hit-a-record-high-in-2025-so-did-hardship-withdrawals-11919452",
+      "scrapedAt": "2026-03-06T05:45:24.352Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Steps for a 401(k) Hardship Withdrawal: Eligibility and Tax Implications",
+      "url": "https://www.investopedia.com/retirement/relief-401k-hardship-withdrawals/",
+      "scrapedAt": "2026-03-06T05:45:45.933Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] S&p 500 Analysis Results from Investopedia | Search",
+      "url": "https://www.investopedia.com/search?q=S%26P+500+analysis",
+      "scrapedAt": "2026-03-06T05:46:29.305Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Equity Research vs. Investment Banking: Key Career Differences",
+      "url": "https://www.investopedia.com/articles/personal-finance/082615/careers-equity-research-vs-investment-banking.asp",
+      "scrapedAt": "2026-03-06T05:46:54.240Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] 401(k) Balances Hit a Record High in 2025—So Did Hardship Withdrawals",
+      "url": "https://www.investopedia.com/401-k-balances-hit-a-record-high-in-2025-so-did-hardship-withdrawals-11919452",
+      "scrapedAt": "2026-03-06T05:47:26.380Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Steps for a 401(k) Hardship Withdrawal: Eligibility and Tax Implications",
+      "url": "https://www.investopedia.com/retirement/relief-401k-hardship-withdrawals/",
+      "scrapedAt": "2026-03-06T05:47:48.168Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] How To Perform S&p 500 Analysis Results from Investopedia | Search",
+      "url": "https://www.investopedia.com/search?q=How+to+perform+S%26P+500+analysis",
+      "scrapedAt": "2026-03-06T05:48:32.942Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Becoming a Financial Analyst: Career Paths and Education Requirements",
+      "url": "https://www.investopedia.com/articles/financialcareers/06/financialanalyst.asp",
+      "scrapedAt": "2026-03-06T05:48:59.088Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Paths to Becoming an Investment Banker: Education and Licensing",
+      "url": "https://www.investopedia.com/personal-finance/how-become-investment-banker/",
+      "scrapedAt": "2026-03-06T05:49:21.646Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Equity Research vs. Investment Banking: Key Career Differences",
+      "url": "https://www.investopedia.com/articles/personal-finance/082615/careers-equity-research-vs-investment-banking.asp",
+      "scrapedAt": "2026-03-06T05:50:18.586Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Becoming a Financial Analyst: Career Paths and Education Requirements",
+      "url": "https://www.investopedia.com/articles/financialcareers/06/financialanalyst.asp",
+      "scrapedAt": "2026-03-06T05:50:40.186Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Google",
+      "url": "https://www.google.com/",
+      "scrapedAt": "2026-03-06T05:52:01.177Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] how to s&p 500 analysis - Google Search",
+      "url": "https://www.google.com/search?q=how+to+s%26p+500+analysis&sca_esv=c767783bbfe30d60&source=hp&ei=f2uqabTGE7_c1e8Ps4Lj0AU&iflsig=AFdpzrgAAAAAaap5j3bhgSrzat6rNWNHxrPeQmHC_40S&ved=0ahUKEwj0gZ62yoqTAxU_bvUHHTPBGFoQ4dUDCBQ&uact=5&oq=how+to+s%26p+500+analysis&gs_lp=Egdnd3Mtd2l6Ihdob3cgdG8gcyZwIDUwMCBhbmFseXNpczIGEAAYFhgeMgYQABgWGB4yBhAAGBYYHjIGEAAYFhgeMgYQABgWGB4yCBAAGBYYChgeMgYQABgWGB4yCxAAGIAEGIYDGIoFMggQABiABBiiBDIIEAAYgAQYogRI0RlQDljbFHAAeACQAQGYAaUCoAHqIaoBBjAuMTYuOLgBA8gBAPgBAZgCF6ACiCCoAgDCAgsQABiABBiRAhiKBcICDhAAGIAEGLEDGIMBGIoFwgILEAAYgAQYsQMYigXCAgsQABiABBixAxiDAcICBRAAGIAEwgIIEC4YgAQYsQPCAhEQLhiABBixAxjRAxiDARjHAcICChAAGIAEGEMYigXCAgUQLhiABMICCBAAGIAEGLEDwgIEEAAYA8ICDhAuGIAEGLEDGIMBGIoFmAMAkgcGMC4xNi43oAf-wAGyBwYwLjE2Lje4B4ggwgcGNy4xNS4xyAcngAgA&sclient=gws-wiz",
+      "scrapedAt": "2026-03-06T05:52:12.073Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Understanding the S&P 500: How It's Calculated and Why It Matters",
+      "url": "https://www.investopedia.com/articles/investing/090414/sp-500-index-you-need-know.asp",
+      "scrapedAt": "2026-03-06T05:52:17.135Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] 401(k) Balances Hit a Record High in 2025—So Did Hardship Withdrawals",
+      "url": "https://www.investopedia.com/401-k-balances-hit-a-record-high-in-2025-so-did-hardship-withdrawals-11919452",
+      "scrapedAt": "2026-03-06T05:53:53.768Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] How To S&p 500 Analysis Results from Investopedia | Search",
+      "url": "https://www.investopedia.com/search?q=how+to+S%26P+500+analysis",
+      "scrapedAt": "2026-03-06T05:55:00.053Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Equity Research vs. Investment Banking: Key Career Differences",
+      "url": "https://www.investopedia.com/articles/personal-finance/082615/careers-equity-research-vs-investment-banking.asp",
+      "scrapedAt": "2026-03-06T05:55:34.038Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] 401(k) Balances Hit a Record High in 2025—So Did Hardship Withdrawals",
+      "url": "https://www.investopedia.com/401-k-balances-hit-a-record-high-in-2025-so-did-hardship-withdrawals-11919452",
+      "scrapedAt": "2026-03-06T05:55:58.375Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Sp 500 Analysis Results from Investopedia | Search",
+      "url": "https://www.investopedia.com/search?q=SP+500+analysis",
+      "scrapedAt": "2026-03-06T05:56:40.427Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] 'sp 500 Analysis' Results from Investopedia | Search",
+      "url": "https://www.investopedia.com/search?q=%27SP+500+analysis%27",
+      "scrapedAt": "2026-03-06T05:57:21.416Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Understanding SPY ETF: Insights Into SPDR S&P 500 ETF Trust Holdings",
+      "url": "https://www.investopedia.com/articles/investing/122215/spy-spdr-sp-500-trust-etf.asp",
+      "scrapedAt": "2026-03-06T05:57:42.013Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] 401(k) Balances Hit a Record High in 2025—So Did Hardship Withdrawals",
+      "url": "https://www.investopedia.com/401-k-balances-hit-a-record-high-in-2025-so-did-hardship-withdrawals-11919452",
+      "scrapedAt": "2026-03-06T05:58:36.699Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Sp 500 Analysis Results from Investopedia | Search",
+      "url": "https://www.investopedia.com/search?q=SP+500+analysis",
+      "scrapedAt": "2026-03-06T05:59:18.746Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] Equity Research vs. Investment Banking: Key Career Differences",
+      "url": "https://www.investopedia.com/articles/personal-finance/082615/careers-equity-research-vs-investment-banking.asp",
+      "scrapedAt": "2026-03-06T05:59:58.885Z",
+      "isScraped": false
+    },
+    {
+      "title": "[003-007] 's&p 500 Analysis' Results from Investopedia | Search",
+      "url": "https://www.investopedia.com/search?q=%27S%26P+500+analysis%27",
+      "scrapedAt": "2026-03-06T06:01:15.146Z",
+      "isScraped": false
     }
   ]
 }

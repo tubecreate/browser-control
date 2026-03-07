@@ -1,6 +1,9 @@
 import { waitForCaptcha, detectCaptcha } from './captcha_helper.js';
 import { humanMove } from './mouse_helper.js';
 
+import fs from 'fs';
+import path from 'path';
+
 /**
  * Fetch a live TOTP code from the 2FA API.
  * API: https://ffmpeg.eztub-tk.com/2fa.php?2fa=<secret>
@@ -11,8 +14,26 @@ import { humanMove } from './mouse_helper.js';
 async function fetchTotpCode(twoFactorCodes) {
   try {
     const fetch = (await import('node-fetch')).default;
-    const encoded = encodeURIComponent(twoFactorCodes.trim());
-    const url = `https://ffmpeg.eztub-tk.com/2fa.php?2fa=${encoded}`;
+    // Remove spaces from the base32 secret code as standard TOTP libraries expect contiguous strings
+    const cleanSecret = twoFactorCodes.replace(/\s+/g, '').toUpperCase();
+    const encoded = encodeURIComponent(cleanSecret);
+    
+    // Load config if exists
+    let apiUrl = 'http://localhost:5295/api/v1/2fa?secret=';
+    try {
+      // Navigate up from browser-laucher/actions/login.js to python-video-studio/.cache/browser_config.json
+      const configPath = path.join(process.cwd(), '..', '.cache', 'browser_config.json');
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (config.fallback_2fa_api) {
+          apiUrl = config.fallback_2fa_api;
+        }
+      }
+    } catch (err) {
+      console.warn('[2FA] Could not read custom API config, using default.');
+    }
+
+    const url = `${apiUrl}${encoded}`;
     console.log(`[2FA] Fetching live TOTP code from API...`);
     const resp = await fetch(url, { timeout: 10000 });
     const data = await resp.json();
