@@ -2,14 +2,30 @@
 import { plugin } from 'playwright-with-fingerprints';
 import fs from 'fs-extra';
 import path from 'path';
+import axios from 'axios';
 
 export class BrowserManager {
     constructor(config = {}) {
-        this.serviceKey = config.serviceKey || 'dLeV7LSYY387fh9bVhxxxZcQVVQ4kR6eXSzOdnNJRfDj9eQ48be5ljPBzyBvPxfr';
         this.baseDir = config.baseDir || './profiles';
-        
-        // Configure plugin globally
-        plugin.setServiceKey(this.serviceKey);
+        this.serviceKey = null;
+    }
+
+    async fetchServiceKey() {
+        if (this.serviceKey) return this.serviceKey;
+        try {
+            console.log('Fetching service key from API...');
+            const response = await axios.get('https://api.tubecreate.com/api/fingerprints/key.php', { timeout: 10000 });
+            if (response.data && response.data.status === 'success' && response.data.key) {
+                // Decode Base64 key
+                this.serviceKey = Buffer.from(response.data.key, 'base64').toString('utf8');
+                plugin.setServiceKey(this.serviceKey);
+                console.log('Service key fetched and decoded.');
+                return this.serviceKey;
+            }
+        } catch (e) {
+            console.error(`Error fetching service key: ${e.message}`);
+        }
+        return null;
     }
 
     async ensureProfile(profileName) {
@@ -77,15 +93,30 @@ export class BrowserManager {
              } catch (e) {}
         }
 
-        console.log(`Fetching NEW Fingerprint with tags: ${JSON.stringify(tags)}`);
+        console.log(`Fetching NEW Fingerprint via api.tubecreate.com...`);
         // Retry logic for fetching
         let attempts = 0;
         while (attempts < 3) {
             try {
-                fingerprint = await plugin.fetch({ tags });
-                // Save it
-                await fs.outputFile(fingerprintPath, JSON.stringify(fingerprint), 'utf8');
-                return fingerprint;
+                const resp = await axios.get('https://api.tubecreate.com/api/fingerprints/getfinger.php', { timeout: 15000 });
+                const data = resp.data;
+                
+                if (data && data.status === 'success' && data.file_path) {
+                    const fpUrl = `https://api.tubecreate.com/${data.file_path}`;
+                    console.log(`Downloading fingerprint from API...`);
+                    const fpResp = await axios.get(fpUrl, { timeout: 15000 });
+                    fingerprint = fpResp.data;
+                    
+                    if (!fingerprint || (typeof fingerprint !== 'object' && typeof fingerprint !== 'string')) {
+                        throw new Error('Invalid fingerprint data received from API');
+                    }
+
+                    // Save it
+                    await fs.outputFile(fingerprintPath, JSON.stringify(fingerprint), 'utf8');
+                    return fingerprint;
+                } else {
+                    throw new Error('Invalid response from getfinger.php');
+                }
             } catch (e) {
                 console.error(`Fingerprint fetch attempt ${attempts + 1} failed: ${e.message}`);
                 attempts++;
@@ -129,6 +160,7 @@ export class BrowserManager {
     }
 
     async launch(profileName, options = {}) {
+        await this.fetchServiceKey();
         const profilePath = await this.ensureProfile(profileName);
         let {
             headless = false,
@@ -179,35 +211,17 @@ export class BrowserManager {
                     // BUT in practice it often requires the JSON string if fetched as string
                     if (fingerprint) {
                         try {
-                            if (typeof fingerprint === 'object') {
-                                // If object, try passing as object first
-                                plugin.useFingerprint(fingerprint);
-                            } else {
-                                // If string, pass as is
-                                plugin.useFingerprint(fingerprint);
-                            }
+                            // The plugin often expects the JSON string for raw fingerprints
+                            const fpToUse = typeof fingerprint === 'object' ? JSON.stringify(fingerprint) : fingerprint;
+                            plugin.useFingerprint(fpToUse);
                         } catch (err) {
-                            // Logic: if object failed, maybe try stringify?
-                            // if string failed, maybe try parse?
-                            if (typeof fingerprint === 'object') {
-                                console.log(`useFingerprint(object) failed: ${err.message}. Trying stringified...`);
-                                plugin.useFingerprint(JSON.stringify(fingerprint));
-                            } else if (typeof fingerprint === 'string') {
-                                // Try parsing?
-                                try {
-                                    const parsed = JSON.parse(fingerprint);
-                                    if (typeof parsed === 'object') {
-                                        console.log('useFingerprint(string) failed, trying parsed object...');
-                                        plugin.useFingerprint(parsed);
-                                    } else {
-                                        throw err;
-                                    }
-                                } catch (parseErr) {
-                                    throw err;
-                                }
-                            } else {
-                                throw err;
-                            }
+                             console.warn(`[BrowserManager] Initial fingerprint application failed: ${err.message}. Retrying with direct object...`);
+                             try {
+                                 const parsed = typeof fingerprint === 'string' ? JSON.parse(fingerprint) : fingerprint;
+                                 plugin.useFingerprint(parsed);
+                             } catch (finalErr) {
+                                 throw err; // Throw original error if both fail
+                             }
                         }
                         break; // Success
                     } else {
@@ -264,23 +278,27 @@ export class BrowserManager {
                 return context;
             } catch (e) {
                 lastError = e;
-                if (options.skipProxyCheck && (
+                if ((options.skipProxyCheck || e.message.toLowerCase().includes('http request error')) && (
                     e.message.toLowerCase().includes('failed to get proxy ip') || 
                     e.message.toLowerCase().includes('proxy') ||
                     e.message.toLowerCase().includes('timeout') ||
+                    e.message.toLowerCase().includes('http request error') ||
                     e.message.toLowerCase().includes('incorrect format')
                 )) {
-                    console.warn(`[Launch] Proxy failed (${e.message}) but skipProxyCheck is enabled. Disabling proxy and retrying...`);
-                    this.applyProxy(null); // Disable proxy in plugin
-                    options.proxy = null; // Update options to reflect change
-                    // No sleep, retry immediately
+                    console.warn(`[Launch] Proxy/HTTP issue detected (${e.message}). Retrying while keeping proxy active...`);
+                    // DO NOT call this.applyProxy(null) here if skipProxyCheck is true!
+                    // We only disable if we want it to definitely fall back to home IP on failure.
+                    // If it's the 3rd attempt, maybe then we disable? 
+                    // No, let's keep it consistent with the user's intent.
                     launchAttempt++;
+                    await new Promise(r => setTimeout(r, 2000));
                     continue;
                 }
 
                 if (e.message.toLowerCase().includes('failed to get proxy ip') || 
                     e.message.toLowerCase().includes('proxy') ||
                     e.message.toLowerCase().includes('timeout') ||
+                    e.message.toLowerCase().includes('http request error') ||
                     e.message.toLowerCase().includes('incorrect format')) {
                     
                     if (e.message.toLowerCase().includes('incorrect format')) {

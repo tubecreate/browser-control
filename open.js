@@ -16,6 +16,7 @@ import * as typeAction from './actions/type.js';
 import * as saveImageAction from './actions/save_image.js';
 import * as searchExtractAction from './actions/search_extract.js';
 import * as extractContentAction from './actions/extract_content.js';
+import * as readGmailAction from './actions/read_gmail.js';
 import { SessionManager } from './session_manager.js';
 import { BrowserManager } from './browser_manager.js';
 import axios from 'axios';
@@ -97,6 +98,7 @@ const ACTION_REGISTRY = {
   watch: watchAction.watch,
   visual_scan: visualScanAction.visual_scan,
   extract_content: extractContentAction.extract_content,
+  read_gmail: readGmailAction.read_gmail,
   wait: async (page, params) => {
     const duration = parseInt(params.duration) || 5;
     console.log(`[WAIT] Waiting for ${duration} seconds...`);
@@ -531,16 +533,18 @@ async function main() {
   
   if (!exportCookies && !isManual) { // Skip planning if exporting cookies or manual mode
       if (prompt) { 
-        // OPTIMIZATION: If prompt looks like a structured command (contains 'then'), skip AI planning
-        if (prompt.includes(', then ') || prompt.includes(', and then ')) {
+        // OPTIMIZATION: If prompt looks like a structured command (contains 'then' or starts with 'read gmail'), skip AI planning
+        if (prompt.includes(', then ') || prompt.includes(', and then ') || prompt.startsWith('read gmail')) {
             console.log('>>> Detected structured prompt. Skipping AI planning for speed.');
             // Simple heuristic parsing
             actionSequence = prompt.split(/, then |, and then /).map(step => {
                 const s = step.trim().toLowerCase();
                 let action = 'browse';
                 let params = {};
-                
-                if (s.startsWith('search for ')) {
+                if (s.startsWith('navigate to ')) {
+                    action = 'navigate';
+                    params = { url: s.replace('navigate to ', '').trim() };
+                } else if (s.startsWith('search for ')) {
                     action = 'search';
                     params = { keyword: s.replace('search for ', '').replace(/'/g, '') };
                 } else if (s.includes('click')) {
@@ -553,6 +557,13 @@ async function main() {
                     } else {
                         params = { element: s.replace('click ', '') };
                     }
+                } else if (s.includes('extract content') || s.includes('extract page content')) {
+                    action = 'extract_content';
+                    params = { type: 'text' }; // Assumed text dump
+                } else if (s.startsWith('read gmail')) {
+                    action = 'read_gmail';
+                    const viewMatch = s.replace('read gmail ', '').trim();
+                    params = { view: viewMatch || 'all' };
                 } else if (s.startsWith('read')) {
                     action = 'browse'; // Map 'read' to 'browse'
                     const match = s.match(/(\d+) seconds/);
@@ -659,8 +670,24 @@ async function main() {
       }
 
       // 2. Browser Initialization
-      console.log('Fetching fingerprint...');
-      plugin.setServiceKey('dLeV7LSYY387fh9bVhxxxZcQVVQ4kR6eXSzOdnNJRfDj9eQ48be5ljPBzyBvPxfr');
+      console.log('Fetching service key...');
+      let serviceKey = '';
+      try {
+        const keyResponse = await axios.get('https://api.tubecreate.com/api/fingerprints/key.php', { timeout: 10000 });
+        if (keyResponse.data && keyResponse.data.status === 'success' && keyResponse.data.key) {
+          // Decode Base64 key
+          serviceKey = Buffer.from(keyResponse.data.key, 'base64').toString('utf8');
+          console.log('Service key fetched and decoded.');
+        } else {
+          throw new Error('Invalid key response format');
+        }
+      } catch (e) {
+        console.error(`Failed to fetch service key: ${e.message}`);
+      }
+      
+      if (serviceKey) {
+        plugin.setServiceKey(serviceKey);
+      }
 
       let fingerprint;
       const fingerprintPath = path.join(profilePath, 'fingerprint.json');
@@ -700,13 +727,13 @@ async function main() {
       } 
       
       if (!fingerprint) {
-          console.log('Fetching fingerprint via BrowserManager...');
+          console.log('Fetching fingerprint via BrowserManager API...');
           try {
               fingerprint = await browserManager.getFingerprint(profileName);
           } catch (e) {
-              console.error(`Failed to get fingerprint: ${e.message}`);
-              // Fallback?
-              fingerprint = await plugin.fetch({ tags: ['Microsoft Windows', 'Chrome'] });
+              console.error(`Failed to get fingerprint from API: ${e.message}`);
+              // Terminate if we can't secure a fingerprint to prevent untracked browser execution
+              process.exit(1);
           }
       }
 
@@ -825,18 +852,35 @@ async function main() {
         if (instanceId) {
             const checkIP = async () => {
                 try {
-                    const resp = await fetch('https://ipwho.is/');
-                    const data = await resp.json();
-                    if (data && data.ip) {
+                    // CRITICAL FIX: Fetch IP from the page context so it uses the proxy/WARP!
+                    if (!page) return;
+                    let ip = await page.evaluate(async () => {
+                        try {
+                            const res = await fetch('https://checkip.amazonaws.com', { signal: AbortSignal.timeout(10000) });
+                            return res.ok ? (await res.text()).trim() : null;
+                        } catch(e) { return null; }
+                    });
+
+                    if (!ip) {
+                        try {
+                            const response = await page.context().request.get('https://checkip.amazonaws.com', { timeout: 10000 });
+                            if (response.ok()) {
+                                const text = await response.text();
+                                ip = text.trim();
+                            }
+                        } catch (e) {}
+                    }
+
+                    if (ip) {
                         await fetch('http://localhost:3000/api/browser-status', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 instanceId,
                                 profile: profileName,
-                                ip: data.ip,
-                                city: data.city,
-                                country: data.country
+                                ip: ip,
+                                city: 'Unknown',
+                                country: 'Unknown'
                             })
                         });
                     }
@@ -1153,7 +1197,7 @@ async function main() {
             
             // Record the page visit
             if (!pageContent.isErrorPage && page) {
-                await session.recordPageVisit(page.url(), pageContent.title);
+                await session.recordPageVisit(page.url(), pageContent.title, page);
             }
             
             if (pageContent.isErrorPage) {

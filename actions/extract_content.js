@@ -54,6 +54,28 @@ export async function extract_content(page, params = {}) {
 
   try {
     // ═══════════════════════════════════════════
+    // 0.5. RAW TEXT EXTRACTION (Bypass article checks)
+    // ═══════════════════════════════════════════
+    if (params.type === 'text') {
+      console.log(`[EXTRACT_CONTENT] 📄 Raw text extraction requested for: ${currentUrl}`);
+      const textContent = await page.evaluate(() => {
+        // Try to find the main content area, fallback to body
+        const main = document.querySelector('main, [role="main"], #main, .main, article, .content');
+        return (main || document.body).innerText;
+      });
+      
+      const result = {
+        title: await page.title(),
+        url: currentUrl,
+        content: textContent,
+        scrapedAt: new Date().toISOString()
+      };
+      
+      console.log(`[EXTRACT_CONTENT] Extracted ${result.content.length} chars of raw text.`);
+      return result;
+    }
+
+    // ═══════════════════════════════════════════
     // 0. CHECK if domain is allowed (skip service/commercial sites)
     // ═══════════════════════════════════════════
     try {
@@ -67,7 +89,6 @@ export async function extract_content(page, params = {}) {
     } catch (e) {
       // URL parse failed, continue anyway
     }
-
     // ═══════════════════════════════════════════
     // 1. DETECT if this is a content/article page
     // ═══════════════════════════════════════════
@@ -349,6 +370,33 @@ export async function extract_content(page, params = {}) {
     // 6. ALSO SAVE to profile history.json
     // ═══════════════════════════════════════════
     try {
+      // Get IP
+      let currentIp = 'Unknown';
+      try {
+        if (page) {
+            // Evaluate in-page using https so it uses the browser's own network stack/proxy
+            currentIp = await page.evaluate(async () => {
+                try {
+                    const res = await fetch('https://checkip.amazonaws.com', { signal: AbortSignal.timeout(8000) });
+                    return res.ok ? (await res.text()).trim() : null;
+                } catch (e) { return null; }
+            });
+
+            // Fallback to context request if evaluate failed
+            if (!currentIp || currentIp === 'Unknown') {
+                try {
+                    const response = await page.context().request.get('https://checkip.amazonaws.com', { timeout: 8000 });
+                    if (response.ok()) {
+                        const text = await response.text();
+                        currentIp = text.trim() || 'Unknown';
+                    }
+                } catch (e) {}
+            }
+        }
+      } catch (e) {
+        // ignore IP fetch error
+      }
+
       const historyPath = path.join(SCRAPED_DATA_DIR, profileName, 'history.json');
       let history = {};
       if (await fs.pathExists(historyPath)) {
@@ -364,6 +412,7 @@ export async function extract_content(page, params = {}) {
         history.scrapedArticles.push({
           title: result.title,
           url: result.url,
+          ip: currentIp,
           author: result.author,
           imageCount: result.imageCount,
           contentLength: result.content.length,
@@ -375,6 +424,9 @@ export async function extract_content(page, params = {}) {
         history.scrapedArticles[existingIdx].imageCount = result.imageCount;
         history.scrapedArticles[existingIdx].contentLength = result.content.length;
         history.scrapedArticles[existingIdx].scrapedAt = result.scrapedAt;
+        if (!history.scrapedArticles[existingIdx].ip || history.scrapedArticles[existingIdx].ip === 'Unknown') {
+            history.scrapedArticles[existingIdx].ip = currentIp;
+        }
       }
 
       if (history.scrapedArticles.length > 500) {

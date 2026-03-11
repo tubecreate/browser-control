@@ -24,6 +24,7 @@ export class SessionManager {
     this.agentContext = agentContext; // NEW: Store agent context (interests, routine)
     this.profileName = profileName; // NEW: Profile name for loading blacklist
     this.blacklist = []; // NEW: Website blacklist
+    this.currentIp = null; // NEW: Track IP address for history logs
     
     this.maxVisitsPerWeek = 3;
     this.maxVisitsPerDay = 1; // NEW: Daily limit
@@ -391,11 +392,53 @@ async loadBlacklist() {
 
 
   /**
+   * Get the current IP address using the browser context
+   */
+  async getCurrentIp(page) {
+    if (this._ipFetchedAt && (Date.now() - this._ipFetchedAt < 10 * 60 * 1000) && this.currentIp && this.currentIp !== 'Unknown') {
+         return this.currentIp;
+    }
+    if (!page) return 'Unknown';
+    
+    let ip = null;
+    try {
+        // Primary: Evaluate in-page using https
+        ip = await page.evaluate(async () => {
+            try {
+                const res = await fetch('https://checkip.amazonaws.com', { signal: AbortSignal.timeout(8000) });
+                return res.ok ? (await res.text()).trim() : null;
+            } catch (e) { return null; }
+        });
+    } catch (e) {}
+
+    if (!ip) {
+        // Secondary fallback: Request context (might bypass some proxies but more reliable than failing)
+        try {
+            const response = await page.context().request.get('https://checkip.amazonaws.com', { timeout: 8000 });
+            if (response.ok()) {
+                const text = await response.text();
+                ip = text.trim();
+            }
+        } catch (e) {}
+    }
+
+    if (ip) {
+        this.currentIp = ip;
+        this._ipFetchedAt = Date.now();
+        console.log(`[SessionManager] Detected Agent IP: ${this.currentIp}`);
+        return this.currentIp;
+    }
+    
+    return this.currentIp || 'Unknown';
+  }
+
+  /**
    * Record a page visit to the profile's history
    */
-  async recordPageVisit(url, title) {
+  async recordPageVisit(url, title, page = null) {
     if (!this.profileName || !url || url === 'about:blank') return;
     try {
+      const ipAddress = page ? await this.getCurrentIp(page) : (this.currentIp || 'Unknown');
       const historyPath = path.resolve('./scraped_data', this.profileName, 'history.json');
       await fs.ensureDir(path.dirname(historyPath));
       let history = {};
@@ -409,12 +452,16 @@ async loadBlacklist() {
       // Avoid immediate duplicate entries
       const lastEntry = history.scrapedArticles[history.scrapedArticles.length - 1];
       if (lastEntry && lastEntry.url === url) {
+          // Update IP if missing
+          if (!lastEntry.ip || lastEntry.ip === 'Unknown') lastEntry.ip = ipAddress;
+          await fs.writeJson(historyPath, history, { spaces: 2 });
           return; // Already recorded
       }
       
       history.scrapedArticles.push({
         title: title || 'Untitled',
         url: url,
+        ip: ipAddress,
         scrapedAt: new Date().toISOString(),
         isScraped: false
       });
