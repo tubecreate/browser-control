@@ -742,10 +742,15 @@ async function main() {
 
       const launchArgs = [
           '--remote-debugging-port=0', // Force random port
-          // Auto-load the TubeCreate extension for profile badge support
-          `--load-extension=${path.resolve('../../browser-extension')}`,
-          `--disable-extensions-except=${path.resolve('../../browser-extension')}`,
       ];
+
+      // Optional: Load specific extensions if provided via CLI
+      if (args['load-extension']) {
+          const extensionPaths = args['load-extension'].split(',').map(p => path.resolve(p.trim()));
+          launchArgs.push(`--load-extension=${extensionPaths.join(',')}`);
+          launchArgs.push(`--disable-extensions-except=${extensionPaths.join(',')}`);
+          console.log(`[Launch] Loading custom extensions: ${extensionPaths.join(', ')}`);
+      }
 
       // Check for Mobile Fingerprint to resize window
       if (fingerprint) {
