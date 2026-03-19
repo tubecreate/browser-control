@@ -879,7 +879,6 @@ async function main() {
         });
 
         // 2. Background IP Check (Reporting to Node Server)
->>>>>>> 78b9a9c (feat: keyword diversification + auto-retry SOCKS5 + rate limit browser launches)
         if (instanceId) {
             const checkIP = async () => {
                 try {
