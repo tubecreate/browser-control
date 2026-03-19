@@ -98,13 +98,13 @@ export class BrowserManager {
         let attempts = 0;
         while (attempts < 3) {
             try {
-                const resp = await axios.get('https://api.tubecreate.com/api/fingerprints/getfinger.php', { timeout: 15000 });
+                const resp = await axios.get('https://api.tubecreate.com/api/fingerprints/getfinger.php', { timeout: 120000 });
                 const data = resp.data;
                 
                 if (data && data.status === 'success' && data.file_path) {
                     const fpUrl = `https://api.tubecreate.com/${data.file_path}`;
                     console.log(`Downloading fingerprint from API...`);
-                    const fpResp = await axios.get(fpUrl, { timeout: 15000 });
+                    const fpResp = await axios.get(fpUrl, { timeout: 120000 });
                     fingerprint = fpResp.data;
                     
                     if (!fingerprint || (typeof fingerprint !== 'object' && typeof fingerprint !== 'string')) {

@@ -128,12 +128,12 @@ def get_fingerprint(name: str) -> Optional[dict]:
             
     # Fetch new from API
     try:
-        resp = requests.get("https://api.tubecreate.com/api/fingerprints/getfinger.php", timeout=15.0)
+        resp = requests.get("https://api.tubecreate.com/api/fingerprints/getfinger.php", timeout=120.0)
         resp.raise_for_status()
         data = resp.json()
         if data and data.get("status") == "success" and data.get("file_path"):
             fp_url = f"https://api.tubecreate.com/{data['file_path']}"
-            fp_resp = requests.get(fp_url, timeout=15.0)
+            fp_resp = requests.get(fp_url, timeout=120.0)
             fp_resp.raise_for_status()
             fp_data = fp_resp.json()
             
