@@ -75,16 +75,19 @@ class BrowserProcessManager:
                              f"Please place the browser-laucher folder next to the tubecli project.",
                 }
 
-            creation_flags = 0
-            if os.name == "nt":
-                creation_flags = subprocess.CREATE_NO_WINDOW
+            # Create log directory for browser output
+            log_dir = Path(launcher_dir).parent / "logs" / "browser"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file_path = log_dir / f"{instance_id}.log"
+            log_file = open(log_file_path, "w", encoding="utf-8")
+            logger.info(f"[Browser] Log file: {log_file_path}")
 
+            # NOTE: Do NOT use CREATE_NO_WINDOW — it hides the browser window!
             process = subprocess.Popen(
                 args,
                 cwd=launcher_dir,
-                creationflags=creation_flags,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=log_file,
+                stderr=log_file,
             )
 
             instance_info = {
@@ -95,7 +98,9 @@ class BrowserProcessManager:
                 "status": "running",
                 "started_at": datetime.now().isoformat(),
                 "command": cmd_str,
+                "log_file": str(log_file_path),
                 "_process": process,
+                "_log_file": log_file,
             }
 
             with self._instances_lock:

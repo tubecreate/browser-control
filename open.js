@@ -964,11 +964,28 @@ async function main() {
             if (page.url() === 'about:blank') await page.goto('https://www.google.com');
         }
 
-        // Loop to check if context is still open
-        while (context.pages().length > 0) {
-            await new Promise(r => setTimeout(r, 1000));
-        }
-        console.log('Browser closed by user.');
+        // Wait until the browser context is closed by the user
+        // Using a Promise-based approach instead of polling pages().length
+        await new Promise((resolve) => {
+          context.on('close', () => {
+            console.log('Browser closed by user.');
+            resolve();
+          });
+          // Fallback: also poll in case 'close' event is missed
+          const pollInterval = setInterval(() => {
+            try {
+              if (context.pages().length === 0) {
+                clearInterval(pollInterval);
+                console.log('All browser tabs closed by user.');
+                resolve();
+              }
+            } catch (e) {
+              // Context already destroyed
+              clearInterval(pollInterval);
+              resolve();
+            }
+          }, 2000);
+        });
         return process.exit(0);
       }
 
@@ -1560,12 +1577,15 @@ async function main() {
         break;
       }
     } finally {
-      console.log('Closing browser in 5 seconds...');
-      if (page && !page.isClosed()) {
-        await page.waitForTimeout(5000);
-      }
-      if (typeof context !== 'undefined') {
-        await context.close();
+      // Skip auto-close in manual mode — manual mode handles its own exit
+      if (!isManual) {
+        console.log('Closing browser in 5 seconds...');
+        if (page && !page.isClosed()) {
+          await page.waitForTimeout(5000);
+        }
+        if (typeof context !== 'undefined') {
+          try { await context.close(); } catch (e) {}
+        }
       }
     }
   }
