@@ -17,7 +17,7 @@ def browser_group():
 @browser_group.command("profiles")
 def list_profiles():
     """List all browser profiles."""
-    from .profile_manager import list_profiles as _list
+    from profile_manager import list_profiles as _list
     profiles = _list()
 
     if not profiles:
@@ -47,7 +47,7 @@ def list_profiles():
 @click.option("--tags", default="Windows,Chrome", help="Comma-separated tags")
 def create_profile(name, proxy, tags):
     """Create a new browser profile."""
-    from .profile_manager import create_profile as _create
+    from profile_manager import create_profile as _create
     try:
         tag_list = [t.strip() for t in tags.split(",")]
         profile = _create(name, proxy=proxy, tags=tag_list)
@@ -61,7 +61,7 @@ def create_profile(name, proxy, tags):
 @click.confirmation_option(prompt="Are you sure?")
 def delete_profile(name):
     """Delete a browser profile."""
-    from .profile_manager import delete_profile as _delete
+    from profile_manager import delete_profile as _delete
     if _delete(name):
         console.print(f"[yellow]🗑 Profile '{name}' deleted.[/yellow]")
     else:
@@ -75,7 +75,7 @@ def delete_profile(name):
 @click.option("--headless", is_flag=True, help="Run headless")
 def launch_browser(profile, prompt, url, headless):
     """Launch a browser with a profile."""
-    from .process_manager import browser_process_manager
+    from process_manager import browser_process_manager
     result = browser_process_manager.spawn(
         profile=profile, prompt=prompt, url=url, headless=headless
     )
@@ -93,7 +93,7 @@ def launch_browser(profile, prompt, url, headless):
 @click.argument("profile")
 def stop_browser(profile):
     """Stop a running browser by profile name."""
-    from .process_manager import browser_process_manager
+    from process_manager import browser_process_manager
     if browser_process_manager.stop_by_profile(profile):
         console.print(f"[yellow]⏹ Browser '{profile}' stopped.[/yellow]")
     else:
@@ -103,7 +103,7 @@ def stop_browser(profile):
 @browser_group.command("status")
 def browser_status():
     """Show running browser instances."""
-    from .process_manager import browser_process_manager
+    from process_manager import browser_process_manager
     instances = browser_process_manager.list_running()
 
     if not instances:

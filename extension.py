@@ -11,13 +11,13 @@ class BrowserExtension(Extension):
     author = "TubeCreate"
 
     def on_enable(self):
-        from .profile_manager import ensure_profiles_dir
+        from profile_manager import ensure_profiles_dir
         ensure_profiles_dir()
 
     def get_commands(self):
-        from .commands import browser_group
+        from commands import browser_group
         return browser_group
 
     def get_routes(self):
-        from .routes import router
+        from routes import router
         return router

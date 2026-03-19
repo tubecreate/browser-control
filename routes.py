@@ -31,12 +31,12 @@ class StopRequest(BaseModel):
 
 @router.get("/profiles")
 async def api_list_profiles():
-    from .profile_manager import list_profiles
+    from profile_manager import list_profiles
     return {"profiles": list_profiles()}
 
 @router.post("/profiles")
 async def api_create_profile(req: ProfileCreateRequest):
-    from .profile_manager import create_profile
+    from profile_manager import create_profile
     try:
         profile = create_profile(req.name, proxy=req.proxy, tags=req.tags)
         return {"status": "created", "profile": profile}
@@ -45,7 +45,7 @@ async def api_create_profile(req: ProfileCreateRequest):
 
 @router.get("/profiles/{name}")
 async def api_get_profile(name: str):
-    from .profile_manager import get_profile
+    from profile_manager import get_profile
     profile = get_profile(name)
     if not profile:
         raise HTTPException(404, f"Profile '{name}' not found")
@@ -53,7 +53,7 @@ async def api_get_profile(name: str):
 
 @router.put("/profiles/{name}")
 async def api_update_profile(name: str, req: ProfileUpdateRequest):
-    from .profile_manager import update_profile
+    from profile_manager import update_profile
     profile = update_profile(name, **req.model_dump(exclude_none=True))
     if not profile:
         raise HTTPException(404, f"Profile '{name}' not found")
@@ -61,14 +61,14 @@ async def api_update_profile(name: str, req: ProfileUpdateRequest):
 
 @router.delete("/profiles/{name}")
 async def api_delete_profile(name: str):
-    from .profile_manager import delete_profile
+    from profile_manager import delete_profile
     if not delete_profile(name):
         raise HTTPException(404, f"Profile '{name}' not found")
     return {"status": "deleted"}
 
 @router.get("/profiles/{name}/fingerprint")
 async def api_get_fingerprint(name: str):
-    from .profile_manager import get_fingerprint
+    from profile_manager import get_fingerprint
     fp = get_fingerprint(name)
     if not fp:
         raise HTTPException(404, f"Fingerprint not found or failed to fetch for profile '{name}'")
@@ -76,7 +76,7 @@ async def api_get_fingerprint(name: str):
 
 @router.post("/profiles/{name}/fingerprint/reset")
 async def api_reset_fingerprint(name: str):
-    from .profile_manager import reset_fingerprint
+    from profile_manager import reset_fingerprint
     if reset_fingerprint(name):
         return {"status": "reset", "profile": name}
     raise HTTPException(404, f"Fingerprint not found for profile '{name}'")
@@ -84,7 +84,7 @@ async def api_reset_fingerprint(name: str):
 
 @router.post("/launch")
 async def api_launch_browser(req: LaunchRequest):
-    from .process_manager import browser_process_manager
+    from process_manager import browser_process_manager
     result = browser_process_manager.spawn(
         profile=req.profile, prompt=req.prompt, url=req.url, headless=req.headless, manual=req.manual
     )
@@ -92,12 +92,12 @@ async def api_launch_browser(req: LaunchRequest):
 
 @router.post("/stop")
 async def api_stop_browser(req: StopRequest):
-    from .process_manager import browser_process_manager
+    from process_manager import browser_process_manager
     if browser_process_manager.stop_by_profile(req.profile):
         return {"status": "stopped", "profile": req.profile}
     raise HTTPException(404, "No running browser for this profile")
 
 @router.get("/status")
 async def api_browser_status():
-    from .process_manager import browser_process_manager
+    from process_manager import browser_process_manager
     return {"instances": browser_process_manager.list_running()}

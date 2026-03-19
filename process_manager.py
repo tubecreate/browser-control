@@ -72,7 +72,7 @@ class BrowserProcessManager:
                     "instance_id": instance_id,
                     "status": "error",
                     "error": f"Browser launcher directory not found: {launcher_dir}. "
-                             f"Installation may be corrupted.",
+                             f"Please place the browser-laucher folder next to the tubecli project.",
                 }
 
             creation_flags = 0
@@ -120,7 +120,7 @@ class BrowserProcessManager:
 
     def _build_args(self, profile, prompt, headless, manual, ai_model, url, instance_id):
         """Build command line arguments for browser launcher."""
-        from .profile_manager import PROFILES_DIR
+        from profile_manager import PROFILES_DIR
         
         args = [
             "node", "open.js", 
