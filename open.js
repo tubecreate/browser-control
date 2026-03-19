@@ -106,7 +106,7 @@ const ACTION_REGISTRY = {
   }
 };
 
-const browserManager = new BrowserManager();
+let browserManager = new BrowserManager();
 
 /**
  * Execute a mission's action[] array using the local ACTION_REGISTRY.
@@ -163,10 +163,10 @@ async function executeMissionActions(page, actions, missionId, profileName, agen
  * @param {string} profileName - Profile directory name under ./profiles/
  * @returns {Promise<boolean>}
  */
-async function checkProfileHasSession(profileName) {
+async function checkProfileHasSession(profileName, profilesDir = './profiles') {
   if (!profileName) return false;
   try {
-    const profilePath = path.resolve(`./profiles/${profileName}`);
+    const profilePath = path.resolve(profilesDir, profileName);
     if (!await fs.pathExists(profilePath)) {
       console.log(`[Auth] Profile '${profileName}' not found — will login to set up.`);
       return false;
@@ -492,7 +492,14 @@ async function main() {
   const instanceId = args['instance-id'] || null; // Instance ID from BrowserProcessManager
   const proxyArg = args['proxy'] || ''; // CLI override
   const skipProxyCheck = args['skip-proxy-check'] || false;
+  const profilesDir = args['profiles-dir'] || './profiles'; // Custom profiles directory from TubeCLI
   let proxy = proxyArg;
+
+  // Re-initialize BrowserManager with custom profiles directory
+  if (args['profiles-dir']) {
+    console.log(`[Config] Using custom profiles directory: ${profilesDir}`);
+    browserManager = new BrowserManager({ baseDir: profilesDir });
+  }
 
   // --- Load Agent Context EARLY ---
   if (args['context-file']) {
@@ -624,7 +631,7 @@ async function main() {
   }
 
 
-  const profilePath = path.resolve(`./profiles/${profileName}`);
+  const profilePath = path.resolve(profilesDir, profileName);
   console.log(`Target Profile: ${profileName} (${profilePath})`);
 
   // --- Multi-Attempt Logic ---
@@ -961,7 +968,11 @@ async function main() {
         } catch (e) {
             // web_manager not running — fallback to google
             console.warn('[Profile] web_manager not reachable, falling back to Google.');
-            if (page.url() === 'about:blank') await page.goto('https://www.google.com');
+            try {
+                if (page.url() === 'about:blank') await page.goto('https://www.google.com');
+            } catch (fallbackErr) {
+                console.warn('[Profile] Fallback navigation also failed: ' + fallbackErr.message);
+            }
         }
 
         // Wait until the browser context is closed by the user
@@ -1385,7 +1396,7 @@ async function main() {
                     actionParams = injectAuthCredentials(page, actionParams, agentContext);
                     // If account has a linked profile, skip login when profile already has session
                     if (actionParams.authProfile) {
-                      const hasSession = await checkProfileHasSession(actionParams.authProfile);
+                      const hasSession = await checkProfileHasSession(actionParams.authProfile, profilesDir);
                       if (hasSession) {
                         console.log(`[Auth] Skipping login — profile '${actionParams.authProfile}' already has session.`);
                         session.recordAction('login', actionParams, 'skipped', 'profile already has session');

@@ -125,13 +125,18 @@ class BrowserProcessManager:
 
     def _build_args(self, profile, prompt, headless, manual, ai_model, url, instance_id):
         """Build command line arguments for browser launcher."""
-        from profile_manager import PROFILES_DIR
+        import os
+        try:
+            from tubecli.config import DATA_DIR
+            profiles_dir = os.path.join(DATA_DIR, "browser_profiles")
+        except ImportError:
+            profiles_dir = os.path.join(os.path.dirname(__file__), "profiles")
         
         args = [
             "node", "open.js", 
             "--profile", profile, 
             "--instance-id", instance_id,
-            "--profiles-dir", PROFILES_DIR
+            "--profiles-dir", profiles_dir
         ]
         if prompt:
             args.extend(["--prompt", prompt])
